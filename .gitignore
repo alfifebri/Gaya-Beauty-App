@@ -1,0 +1,39 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+# --- TAMBAHAN KHUSUS BACKEND (GO) ---
+# Supaya file rahasia & database gak bocor
+.env
+*.db
+*.sqlite
+
+# Supaya hasil build (aplikasi jadi) gak menuhin storage
+*.exe
+*.test
+main
+
+# Supaya folder gambar upload user gak ikut ke-upload
+uploads/
+gaya-beauty-backend/uploads/
+public/uploads/
