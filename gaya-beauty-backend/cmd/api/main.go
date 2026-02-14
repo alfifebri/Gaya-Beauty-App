@@ -14,15 +14,13 @@ func main() {
 	defer db.Close()
 
 	// =================================================================
-	// ☢️ PINTU DARURAT 1: RESET TOTAL (DESTROY & REBUILD) ☢️
+	// ☢️ PINTU DARURAT: RESET TOTAL & PERSIAPAN TABEL LENGKAP ☢️
 	// Akses: [LinkKoyeb]/reset-db-now
 	// =================================================================
 	http.HandleFunc("/reset-db-now", func(w http.ResponseWriter, r *http.Request) {
-		// A. HANCURKAN TABEL LAMA (Karena strukturnya salah/kurang kolom)
-		_, errDrop := db.Exec("DROP TABLE IF EXISTS users")
-
-		// B. BANGUN TABEL BARU (Lengkap dengan Role & Password Panjang)
-		queryCreate := `
+		// A. USER: Hancurkan Tabel Lama & Bangun Baru (Ada Role)
+		_, _ = db.Exec("DROP TABLE IF EXISTS users")
+		queryUser := `
 		CREATE TABLE users (
 			id INT AUTO_INCREMENT PRIMARY KEY,
 			full_name VARCHAR(100),
@@ -31,32 +29,56 @@ func main() {
 			role VARCHAR(50) DEFAULT 'admin',
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)`
-		_, errCreate := db.Exec(queryCreate)
+		_, errUser := db.Exec(queryUser)
 
-		// C. Lapor ke Layar Browser
-		fmt.Fprintf(w, "=== STATUS RESET TOTAL (BANGUN ULANG) ===\n")
-		fmt.Fprintf(w, "1. Hancurkan Tabel Lama: %v (Nil = Sukses)\n", errDrop)
-		fmt.Fprintf(w, "2. Bangun Tabel Baru (Ada Role & Password 255): %v (Nil = Sukses)\n", errCreate)
-		fmt.Fprintf(w, "\n✅ SELESAI! TABEL UDAH SEMPURNA. SEKARANG BUKA /signup DAN DAFTAR ULANG!")
+		// B. PRODUK: Pastikan Tabel Produk Ada (Biar gak error pas upload)
+		queryProduct := `
+		CREATE TABLE IF NOT EXISTS products (
+			id INT AUTO_INCREMENT PRIMARY KEY,
+			name VARCHAR(255),
+			price DECIMAL(10, 2),
+			stock INT,
+			category VARCHAR(100),
+			description TEXT,
+			image_url VARCHAR(255),
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`
+		_, errProd := db.Exec(queryProduct)
+
+		// C. ORDERS: Pastikan Tabel Order Ada
+		queryOrder := `
+		CREATE TABLE IF NOT EXISTS orders (
+			id INT AUTO_INCREMENT PRIMARY KEY,
+			customer_name VARCHAR(100),
+			total_price DECIMAL(10, 2),
+			status VARCHAR(50) DEFAULT 'Pending',
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`
+		_, errOrder := db.Exec(queryOrder)
+
+		// D. Lapor ke Layar Browser
+		fmt.Fprintf(w, "=== STATUS RESET & PERSIAPAN DATABASE ===\n")
+		fmt.Fprintf(w, "1. Reset Tabel User (Ada Role): %v (Nil = Sukses)\n", errUser)
+		fmt.Fprintf(w, "2. Siapkan Tabel Products: %v (Nil = Sukses)\n", errProd)
+		fmt.Fprintf(w, "3. Siapkan Tabel Orders: %v (Nil = Sukses)\n", errOrder)
+		fmt.Fprintf(w, "\n✅ SEMUA TABEL SIAP! SILAKAN UPLOAD PRODUK SEPUASNYA!")
 	})
 
 	// =================================================================
-	// 🕵️‍♂️ PINTU DARURAT 2: X-RAY CEK USER (Intip Data) 🕵️‍♂️
+	// 🕵️‍♂️ FITUR X-RAY CEK USER 🕵️‍♂️
 	// Akses: [LinkKoyeb]/cek-user
 	// =================================================================
 	http.HandleFunc("/cek-user", func(w http.ResponseWriter, r *http.Request) {
-		// Sekarang query ini pasti berhasil karena tabel baru udah punya 'role'
 		rows, err := db.Query("SELECT id, email, password, role FROM users")
 		if err != nil {
-			fmt.Fprintf(w, "Gagal ambil data (Mungkin tabel belum di-reset?): %v", err)
+			fmt.Fprintf(w, "Gagal ambil data: %v", err)
 			return
 		}
 		defer rows.Close()
 
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprintf(w, "<h1>🔍 HASIL X-RAY DATABASE:</h1>")
-		fmt.Fprintf(w, "<table border='1' cellpadding='10' style='border-collapse: collapse;'>")
-		fmt.Fprintf(w, "<tr style='background-color: #f2f2f2;'><th>ID</th><th>Email</th><th>Role</th><th>Panjang Password (Hash)</th><th>Status</th></tr>")
+		fmt.Fprintf(w, "<table border='1' cellpadding='10'><tr><th>ID</th><th>Email</th><th>Role</th><th>Status Pw</th></tr>")
 		
 		found := false
 		for rows.Next() {
@@ -65,28 +87,19 @@ func main() {
 			var email, password, role string
 			rows.Scan(&id, &email, &password, &role)
 			
-			// Cek Panjang Password
-			panjang := len(password)
-			status := "<b style='color:green'>✅ SEHAT (AMAN)</b>"
-			if panjang < 60 {
-				status = "<b style='color:red'>❌ RUSAK (KEPOTONG)</b>"
-			}
+			status := "✅ AMAN"
+			if len(password) < 60 { status = "❌ RUSAK" }
 
-			fmt.Fprintf(w, "<tr><td>%d</td><td>%s</td><td>%s</td><td>%d Karakter</td><td>%s</td></tr>", id, email, role, panjang, status)
+			fmt.Fprintf(w, "<tr><td>%d</td><td>%s</td><td>%s</td><td>%s</td></tr>", id, email, role, status)
 		}
 		fmt.Fprintf(w, "</table>")
-
-		if !found {
-			fmt.Fprintf(w, "<h3>⚠️ DATABASE KOSONG (Belum ada user, silakan daftar dulu!)</h3>")
-		}
+		if !found { fmt.Fprintf(w, "<h3>Database Kosong</h3>") }
 	})
-
-	// =================================================================
 
 	// --- JALUR PUBLIK ---
 	http.HandleFunc("/login", handlers.HandleLogin(db))
 	http.HandleFunc("/register", handlers.HandleRegister(db))
-	http.HandleFunc("/products", handlers.HandleProducts(db))
+	http.HandleFunc("/products", handlers.HandleProducts(db)) 
 	http.HandleFunc("/checkout", handlers.HandleCheckout(db))
 
 	// --- JALUR FILE GAMBAR ---
@@ -96,6 +109,7 @@ func main() {
 	http.HandleFunc("/orders", handlers.AuthMiddleware(handlers.HandleGetOrders(db)))
 	http.HandleFunc("/orders/update", handlers.AuthMiddleware(handlers.HandleUpdateOrderStatus(db)))
 	
+	// INI DIA YANG PENTING BUAT UPLOAD PRODUK:
 	http.HandleFunc("/products/create", handlers.AuthMiddleware(handlers.HandleCreateProduct(db)))
 	http.HandleFunc("/products/update", handlers.AuthMiddleware(handlers.HandleUpdateProduct(db)))
 	http.HandleFunc("/products/delete", handlers.AuthMiddleware(handlers.HandleDeleteProduct(db)))

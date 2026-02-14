@@ -66,9 +66,12 @@ function AdminDashboard() {
   const fetchOrders = async () => {
     try {
       const token = localStorage.getItem('token')
-      const res = await axios.get('https://changing-carmita-afcodestudio-212bd12d.koyeb.app/orders', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      const res = await axios.get(
+        'https://changing-carmita-afcodestudio-212bd12d.koyeb.app/orders',
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      )
       setOrders(res.data || [])
     } catch (err) {
       console.error('Gagal ambil order', err)
@@ -77,7 +80,9 @@ function AdminDashboard() {
 
   const fetchProducts = async () => {
     try {
-      const res = await axios.get('https://changing-carmita-afcodestudio-212bd12d.koyeb.app/products')
+      const res = await axios.get(
+        'https://changing-carmita-afcodestudio-212bd12d.koyeb.app/products'
+      )
       setProducts(res.data || [])
     } catch (err) {
       console.error('Gagal ambil produk', err)
@@ -203,21 +208,29 @@ function AdminDashboard() {
       if (isEditing) {
         // --- LOGIC UPDATE ---
         formData.append('id', editId) // Kirim ID buat update
-        await axios.put('https://changing-carmita-afcodestudio-212bd12d.koyeb.app/products/update', formData, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'multipart/form-data',
-          },
-        })
+        await axios.put(
+          'https://changing-carmita-afcodestudio-212bd12d.koyeb.app/products/update',
+          formData,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'multipart/form-data',
+            },
+          }
+        )
         alert('Produk Berhasil Diupdate! 🎉')
       } else {
-        // --- LOGIC CREATE ---
-        await axios.post('https://changing-carmita-afcodestudio-212bd12d.koyeb.app/products', formData, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'multipart/form-data',
-          },
-        })
+        // --- LOGIC CREATE (FIXED: Tambahin /create di ujung URL) ---
+        await axios.post(
+          'https://changing-carmita-afcodestudio-212bd12d.koyeb.app/products/create',
+          formData,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'multipart/form-data',
+            },
+          }
+        )
         alert('Produk Baru Berhasil Ditambah! 🚀')
       }
 
