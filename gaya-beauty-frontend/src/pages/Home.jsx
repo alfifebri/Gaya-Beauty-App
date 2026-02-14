@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
-import { useNavigate } from 'react-router-dom' // Pake ini biar navigasi halus
+import { useNavigate } from 'react-router-dom'
 
 function Home() {
   const navigate = useNavigate()
@@ -20,10 +20,14 @@ function Home() {
   }, [])
 
   const fetchProducts = async () => {
-    const res = await axios.get(
-      'https://changing-carmita-afcodestudio-212bd12d.koyeb.app/products'
-    )
-    setProducts(res.data || [])
+    try {
+      const res = await axios.get(
+        'https://changing-carmita-afcodestudio-212bd12d.koyeb.app/products'
+      )
+      setProducts(res.data || [])
+    } catch (err) {
+      console.error('Gagal ambil produk', err)
+    }
   }
 
   // --- LOGIKA FILTERING ---
@@ -67,7 +71,7 @@ function Home() {
       await axios.post(
         'https://changing-carmita-afcodestudio-212bd12d.koyeb.app/checkout',
         {
-          customer_name: 'Alfi Febriawan',
+          customer_name: 'Alfi Febriawan', // Nanti bisa diganti dinamis kalau ada login customer
           payment_method: paymentMethod,
           cart_items: cart.map((item) => ({
             product_id: item.id,
@@ -93,9 +97,16 @@ function Home() {
       minimumFractionDigits: 0,
     }).format(number)
 
+  // --- HELPER GAMBAR (Supaya Gak Crash di Halaman Home) ---
+  const getImageUrl = (url) => {
+    if (!url || url === '') return 'https://placehold.co/150?text=No+Image'
+    if (url.startsWith('http')) return url
+    return `https://changing-carmita-afcodestudio-212bd12d.koyeb.app/${url}`
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 font-sans">
-      {/* NAVBAR DENGAN SEARCH BAR */}
+      {/* NAVBAR */}
       <nav className="bg-white border-b px-6 py-4 flex flex-col md:flex-row gap-4 justify-between items-center sticky top-0 z-50 shadow-sm">
         <div className="font-bold text-2xl text-blue-600 italic shrink-0">
           Gaya Beauty
@@ -110,7 +121,6 @@ function Home() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <span className="absolute left-4 top-2 text-slate-400"></span>
         </div>
 
         <button
@@ -130,7 +140,11 @@ function Home() {
           <button
             key={cat}
             onClick={() => setCategoryFilter(cat)}
-            className={`px-6 py-2 rounded-full text-xs font-bold whitespace-nowrap border transition shadow-sm ${categoryFilter === cat ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-500 border-slate-200 hover:border-blue-300'}`}
+            className={`px-6 py-2 rounded-full text-xs font-bold whitespace-nowrap border transition shadow-sm ${
+              categoryFilter === cat
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-white text-slate-500 border-slate-200 hover:border-blue-300'
+            }`}
           >
             {cat}
           </button>
@@ -155,9 +169,13 @@ function Home() {
                 onClick={() => navigate(`/product/${p.id}`)}
               >
                 <img
-                  src={p.image_url}
+                  // Pake Helper di sini biar gak crash
+                  src={getImageUrl(p.image_url)}
                   className="w-full h-full object-cover group-hover:scale-110 transition duration-500"
                   alt={p.name}
+                  onError={(e) => {
+                    e.target.src = 'https://placehold.co/150?text=No+Image'
+                  }}
                 />
               </div>
               <div className="p-4">
@@ -187,7 +205,7 @@ function Home() {
         )}
       </main>
 
-      {/* SIDEBAR KERANJANG (STICKY FOOTER) */}
+      {/* SIDEBAR KERANJANG */}
       {showCart && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex justify-end backdrop-blur-sm">
           <div className="bg-white w-full sm:w-[450px] h-full flex flex-col animate-in slide-in-from-right duration-300">
@@ -220,7 +238,11 @@ function Home() {
                     >
                       <div className={isOutOfStock ? 'opacity-50' : ''}>
                         <p
-                          className={`font-bold text-sm ${isOutOfStock ? 'line-through italic text-red-500' : 'text-slate-800'}`}
+                          className={`font-bold text-sm ${
+                            isOutOfStock
+                              ? 'line-through italic text-red-500'
+                              : 'text-slate-800'
+                          }`}
                         >
                           {item.name} {isOutOfStock && '(Stok Habis)'}
                         </p>
@@ -249,13 +271,21 @@ function Home() {
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     onClick={() => setPaymentMethod('COD')}
-                    className={`py-3 text-xs font-bold rounded-xl border-2 transition ${paymentMethod === 'COD' ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-100' : 'bg-white text-slate-500 border-slate-100 hover:border-blue-200'}`}
+                    className={`py-3 text-xs font-bold rounded-xl border-2 transition ${
+                      paymentMethod === 'COD'
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-100'
+                        : 'bg-white text-slate-500 border-slate-100 hover:border-blue-200'
+                    }`}
                   >
                     COD (Tunai)
                   </button>
                   <button
                     onClick={() => setPaymentMethod('M-Banking')}
-                    className={`py-3 text-xs font-bold rounded-xl border-2 transition ${paymentMethod === 'M-Banking' ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-100' : 'bg-white text-slate-500 border-slate-100 hover:border-blue-200'}`}
+                    className={`py-3 text-xs font-bold rounded-xl border-2 transition ${
+                      paymentMethod === 'M-Banking'
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-100'
+                        : 'bg-white text-slate-500 border-slate-100 hover:border-blue-200'
+                    }`}
                   >
                     M-Banking
                   </button>

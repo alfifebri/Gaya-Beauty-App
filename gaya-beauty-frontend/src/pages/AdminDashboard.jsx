@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
-// Pastikan sudah install: npm install react-icons
 import {
   FiPlus,
   FiTrash2,
@@ -17,7 +16,7 @@ function AdminDashboard() {
   const navigate = useNavigate()
 
   // --- STATE UMUM ---
-  const [activeTab, setActiveTab] = useState('orders') // 'orders' atau 'products'
+  const [activeTab, setActiveTab] = useState('orders')
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
 
@@ -29,9 +28,9 @@ function AdminDashboard() {
   const [orders, setOrders] = useState([])
   const [products, setProducts] = useState([])
 
-  // --- STATE MODAL PRODUK (TAMBAH/EDIT) ---
+  // --- STATE MODAL ---
   const [showModal, setShowModal] = useState(false)
-  const [isEditing, setIsEditing] = useState(false) // Penanda lagi ngedit atau bikin baru
+  const [isEditing, setIsEditing] = useState(false)
   const [editId, setEditId] = useState(null)
   const [selectedFileName, setSelectedFileName] = useState(
     'Belum ada file dipilih'
@@ -48,7 +47,7 @@ function AdminDashboard() {
   })
   const fileInputRef = useRef(null)
 
-  // 1. CEK LOGIN SAAT AWAL BUKA
+  // 1. CEK LOGIN
   useEffect(() => {
     const token = localStorage.getItem('token')
     if (token) {
@@ -57,7 +56,7 @@ function AdminDashboard() {
     }
   }, [])
 
-  // 2. FUNGSI AMBIL DATA (REFRESH)
+  // 2. FUNGSI AMBIL DATA
   const fetchInitialData = () => {
     fetchOrders()
     fetchProducts()
@@ -68,9 +67,7 @@ function AdminDashboard() {
       const token = localStorage.getItem('token')
       const res = await axios.get(
         'https://changing-carmita-afcodestudio-212bd12d.koyeb.app/orders',
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
+        { headers: { Authorization: `Bearer ${token}` } }
       )
       setOrders(res.data || [])
     } catch (err) {
@@ -96,10 +93,7 @@ function AdminDashboard() {
     try {
       const res = await axios.post(
         'https://changing-carmita-afcodestudio-212bd12d.koyeb.app/login',
-        {
-          email,
-          password,
-        }
+        { email, password }
       )
       localStorage.setItem('token', res.data.token)
       setIsLoggedIn(true)
@@ -119,7 +113,7 @@ function AdminDashboard() {
     navigate('/admin')
   }
 
-  // 5. HANDLE UPDATE STATUS ORDER (Pesanan)
+  // 5. UPDATE STATUS ORDER
   const handleUpdateOrderStatus = async (orderID, newStatus) => {
     try {
       const token = localStorage.getItem('token')
@@ -128,24 +122,21 @@ function AdminDashboard() {
         { order_id: orderID, status: newStatus },
         { headers: { Authorization: `Bearer ${token}` } }
       )
-      fetchOrders() // Refresh tabel
+      fetchOrders()
       alert(`Status berubah jadi: ${newStatus}`)
     } catch (err) {
       alert('Gagal update status!')
     }
   }
 
-  // 6. HANDLE HAPUS PRODUK
+  // 6. HAPUS PRODUK
   const handleDeleteProduct = async (id) => {
     if (!window.confirm('Yakin mau hapus produk ini?')) return
-
     try {
       const token = localStorage.getItem('token')
       await axios.delete(
         `https://changing-carmita-afcodestudio-212bd12d.koyeb.app/products/delete?id=${id}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
+        { headers: { Authorization: `Bearer ${token}` } }
       )
       fetchProducts()
       alert('Produk berhasil dihapus!')
@@ -154,10 +145,9 @@ function AdminDashboard() {
     }
   }
 
-  // 7. HANDLE BUKA MODAL (UNTUK TAMBAH ATAU EDIT)
+  // 7. BUKA MODAL
   const openModal = (product = null) => {
     if (product) {
-      // MODE EDIT: Isi form dengan data produk yang mau diedit
       setIsEditing(true)
       setEditId(product.id)
       setProductForm({
@@ -166,11 +156,10 @@ function AdminDashboard() {
         stock: product.stock,
         category: product.category,
         description: product.description,
-        image: null, // Gambar dikosongin dulu (kalo user gak ganti, pake yg lama)
+        image: null,
       })
       setSelectedFileName('Gambar lama tetap dipakai (kecuali diganti)')
     } else {
-      // MODE TAMBAH BARU: Kosongkan form
       setIsEditing(false)
       setEditId(null)
       setProductForm({
@@ -186,7 +175,7 @@ function AdminDashboard() {
     setShowModal(true)
   }
 
-  // 8. HANDLE SIMPAN PRODUK (CREATE / UPDATE)
+  // 8. SIMPAN PRODUK
   const handleSaveProduct = async (e) => {
     e.preventDefault()
     setIsLoading(true)
@@ -203,32 +192,26 @@ function AdminDashboard() {
 
     try {
       const token = localStorage.getItem('token')
+      const config = {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data',
+        },
+      }
 
       if (isEditing) {
-        // --- LOGIC UPDATE ---
         formData.append('id', editId)
         await axios.put(
           'https://changing-carmita-afcodestudio-212bd12d.koyeb.app/products/update',
           formData,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'multipart/form-data',
-            },
-          }
+          config
         )
         alert('Produk Berhasil Diupdate! 🎉')
       } else {
-        // --- LOGIC CREATE ---
         await axios.post(
           'https://changing-carmita-afcodestudio-212bd12d.koyeb.app/products/create',
           formData,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'multipart/form-data',
-            },
-          }
+          config
         )
         alert('Produk Baru Berhasil Ditambah! 🚀')
       }
@@ -245,13 +228,8 @@ function AdminDashboard() {
 
   // --- HELPER UNTUK GAMBAR (Supaya Gak Crash) ---
   const getImageUrl = (url) => {
-    // 1. Kalau URL-nya kosong/null, pake gambar default (Placeholder)
-    if (!url) return 'https://via.placeholder.com/150?text=No+Image'
-
-    // 2. Kalau URL-nya udah lengkap (ada http/https), pake itu
+    if (!url || url === '') return 'https://placehold.co/150?text=No+Image'
     if (url.startsWith('http')) return url
-
-    // 3. Kalau URL-nya cuma 'uploads/foto.jpg', tambahin domain Koyeb di depannya
     return `https://changing-carmita-afcodestudio-212bd12d.koyeb.app/${url}`
   }
 
@@ -298,7 +276,7 @@ function AdminDashboard() {
   // --- VIEW: DASHBOARD UTAMA ---
   return (
     <div className="min-h-screen bg-slate-50 font-sans">
-      {/* 1. HEADER CLEAN */}
+      {/* HEADER */}
       <header className="bg-white border-b px-6 py-4 sticky top-0 z-10 shadow-sm">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-2">
@@ -332,7 +310,7 @@ function AdminDashboard() {
       </header>
 
       <div className="max-w-7xl mx-auto p-6">
-        {/* 2. TAB NAVIGASI */}
+        {/* TAB NAVIGASI */}
         <div className="flex gap-6 mb-8 border-b border-slate-200">
           <button
             onClick={() => setActiveTab('orders')}
@@ -348,7 +326,7 @@ function AdminDashboard() {
           </button>
         </div>
 
-        {/* 3. KONTEN: TABEL PESANAN */}
+        {/* TABEL PESANAN */}
         {activeTab === 'orders' && (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
             <table className="w-full text-left">
@@ -358,7 +336,7 @@ function AdminDashboard() {
                   <th className="px-6 py-4">Customer</th>
                   <th className="px-6 py-4">Total</th>
                   <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4 text-center">Aksi</th>
+                  <th className="px-6 py-4 text-center">Dikirim</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -420,7 +398,7 @@ function AdminDashboard() {
           </div>
         )}
 
-        {/* 4. KONTEN: TABEL PRODUK */}
+        {/* TABEL PRODUK */}
         {activeTab === 'products' && (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
             <table className="w-full text-left">
@@ -438,13 +416,12 @@ function AdminDashboard() {
                   <tr key={product.id} className="hover:bg-slate-50">
                     <td className="px-6 py-4">
                       <img
-                        // Pake fungsi helper biar aman & gak crash
                         src={getImageUrl(product.image_url)}
                         alt={product.name}
                         className="w-10 h-10 rounded-lg object-cover bg-slate-200 border border-slate-300"
                         onError={(e) => {
                           e.target.src =
-                            'https://via.placeholder.com/150?text=No+Image'
+                            'https://placehold.co/150?text=No+Image' // Pake placeholder.co biar stabil
                         }}
                       />
                     </td>
@@ -477,7 +454,7 @@ function AdminDashboard() {
         )}
       </div>
 
-      {/* 5. MODAL FORM PRODUK */}
+      {/* MODAL FORM */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
           <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden">
