@@ -15,7 +15,7 @@ function SignUp() {
     e.preventDefault()
     setLoading(true)
     try {
-      const res = await axios.post('http://localhost:8081/register', formData)
+      const res = await axios.post('https://changing-carmita-afcodestudio-212bd12d.koyeb.app/register', formData)
       alert(res.data.message)
       navigate('/admin') // Lempar ke login setelah daftar
     } catch (err) {

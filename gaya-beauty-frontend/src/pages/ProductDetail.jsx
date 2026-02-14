@@ -21,7 +21,7 @@ function ProductDetail() {
     setProduct(null)
     setLoading(true)
     axios
-      .get('http://localhost:8081/products')
+      .get('https://changing-carmita-afcodestudio-212bd12d.koyeb.app/products')
       .then((res) => {
         const found = res.data.find((p) => p.id === parseInt(id))
         setProduct(found || null)
@@ -73,7 +73,7 @@ function ProductDetail() {
 
     try {
       // 1. Kirim Data ke Database (Backend Go)
-      const res = await axios.post('http://localhost:8081/checkout', dataOrder)
+      const res = await axios.post('https://changing-carmita-afcodestudio-212bd12d.koyeb.app/checkout', dataOrder)
       
       // 2. Siapkan Pesan WhatsApp
       // GANTI NOMOR HP INI JADI NOMOR WA LO (Pake 62, jangan 08)

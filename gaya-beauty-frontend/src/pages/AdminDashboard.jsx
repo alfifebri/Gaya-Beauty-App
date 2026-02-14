@@ -66,7 +66,7 @@ function AdminDashboard() {
   const fetchOrders = async () => {
     try {
       const token = localStorage.getItem('token')
-      const res = await axios.get('http://localhost:8081/orders', {
+      const res = await axios.get('https://changing-carmita-afcodestudio-212bd12d.koyeb.app/orders', {
         headers: { Authorization: `Bearer ${token}` },
       })
       setOrders(res.data || [])
@@ -77,7 +77,7 @@ function AdminDashboard() {
 
   const fetchProducts = async () => {
     try {
-      const res = await axios.get('http://localhost:8081/products')
+      const res = await axios.get('https://changing-carmita-afcodestudio-212bd12d.koyeb.app/products')
       setProducts(res.data || [])
     } catch (err) {
       console.error('Gagal ambil produk', err)
@@ -89,10 +89,13 @@ function AdminDashboard() {
     e.preventDefault()
     setIsLoading(true)
     try {
-      const res = await axios.post('http://localhost:8081/login', {
-        email,
-        password,
-      })
+      const res = await axios.post(
+        'https://changing-carmita-afcodestudio-212bd12d.koyeb.app/login',
+        {
+          email,
+          password,
+        }
+      )
       localStorage.setItem('token', res.data.token)
       setIsLoggedIn(true)
       fetchInitialData()
@@ -116,7 +119,7 @@ function AdminDashboard() {
     try {
       const token = localStorage.getItem('token')
       await axios.put(
-        'http://localhost:8081/orders/update',
+        'https://changing-carmita-afcodestudio-212bd12d.koyeb.app/orders/update',
         { order_id: orderID, status: newStatus },
         { headers: { Authorization: `Bearer ${token}` } }
       )
@@ -134,9 +137,12 @@ function AdminDashboard() {
     try {
       const token = localStorage.getItem('token')
       // Panggil API DELETE yang barusan kita bikin di Go
-      await axios.delete(`http://localhost:8081/products/delete?id=${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      await axios.delete(
+        `https://changing-carmita-afcodestudio-212bd12d.koyeb.app/products/delete?id=${id}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      )
       fetchProducts()
       alert('Produk berhasil dihapus!')
     } catch (err) {
@@ -197,7 +203,7 @@ function AdminDashboard() {
       if (isEditing) {
         // --- LOGIC UPDATE ---
         formData.append('id', editId) // Kirim ID buat update
-        await axios.put('http://localhost:8081/products/update', formData, {
+        await axios.put('https://changing-carmita-afcodestudio-212bd12d.koyeb.app/products/update', formData, {
           headers: {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'multipart/form-data',
@@ -206,7 +212,7 @@ function AdminDashboard() {
         alert('Produk Berhasil Diupdate! 🎉')
       } else {
         // --- LOGIC CREATE ---
-        await axios.post('http://localhost:8081/products', formData, {
+        await axios.post('https://changing-carmita-afcodestudio-212bd12d.koyeb.app/products', formData, {
           headers: {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'multipart/form-data',

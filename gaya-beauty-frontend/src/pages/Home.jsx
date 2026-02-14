@@ -20,7 +20,9 @@ function Home() {
   }, [])
 
   const fetchProducts = async () => {
-    const res = await axios.get('http://localhost:8081/products')
+    const res = await axios.get(
+      'https://changing-carmita-afcodestudio-212bd12d.koyeb.app/products'
+    )
     setProducts(res.data || [])
   }
 
@@ -62,16 +64,19 @@ function Home() {
     }
 
     try {
-      await axios.post('http://localhost:8081/checkout', {
-        customer_name: 'Alfi Febriawan',
-        payment_method: paymentMethod,
-        cart_items: cart.map((item) => ({
-          product_id: item.id,
-          quantity: item.qty,
-          price: item.price,
-        })),
-        total_price: totalPrice,
-      })
+      await axios.post(
+        'https://changing-carmita-afcodestudio-212bd12d.koyeb.app/checkout',
+        {
+          customer_name: 'Alfi Febriawan',
+          payment_method: paymentMethod,
+          cart_items: cart.map((item) => ({
+            product_id: item.id,
+            quantity: item.qty,
+            price: item.price,
+          })),
+          total_price: totalPrice,
+        }
+      )
       alert(`Berhasil! Pesanan diproses dengan metode ${paymentMethod}`)
       setCart([])
       setShowCart(false)
