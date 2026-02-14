@@ -97,11 +97,22 @@ function Home() {
       minimumFractionDigits: 0,
     }).format(number)
 
-  // --- HELPER GAMBAR (Supaya Gak Crash di Halaman Home) ---
+  // --- HELPER BARU (PEMBERSIH LOCALHOST & SUPAYA GAK CRASH) ---
   const getImageUrl = (url) => {
+    // 1. Kalau kosong, kasih placeholder
     if (!url || url === '') return 'https://placehold.co/150?text=No+Image'
-    if (url.startsWith('http')) return url
-    return `https://changing-carmita-afcodestudio-212bd12d.koyeb.app/${url}`
+
+    // 2. HAPUS 'http://localhost:8081/' atau '8080' kalau kesimpen di database
+    // Ini penting banget biar gak kena Mixed Content Error
+    let cleanUrl = url
+      .replace('http://localhost:8081/', '')
+      .replace('http://localhost:8080/', '')
+
+    // 3. Kalau link-nya dari internet beneran (misal google.com), biarin
+    if (cleanUrl.startsWith('http')) return cleanUrl
+
+    // 4. Sisanya tempel ke Koyeb
+    return `https://changing-carmita-afcodestudio-212bd12d.koyeb.app/${cleanUrl}`
   }
 
   return (
@@ -169,7 +180,7 @@ function Home() {
                 onClick={() => navigate(`/product/${p.id}`)}
               >
                 <img
-                  // Pake Helper di sini biar gak crash
+                  // Pake Helper di sini biar gak crash dan gak mixed content
                   src={getImageUrl(p.image_url)}
                   className="w-full h-full object-cover group-hover:scale-110 transition duration-500"
                   alt={p.name}

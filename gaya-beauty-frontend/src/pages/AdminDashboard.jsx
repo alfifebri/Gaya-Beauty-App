@@ -32,9 +32,7 @@ function AdminDashboard() {
   const [showModal, setShowModal] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editId, setEditId] = useState(null)
-  const [selectedFileName, setSelectedFileName] = useState(
-    'Belum ada file dipilih'
-  )
+  const [selectedFileName, setSelectedFileName] = useState('Belum ada file dipilih')
 
   // Form Data Produk
   const [productForm, setProductForm] = useState({
@@ -226,11 +224,20 @@ function AdminDashboard() {
     }
   }
 
-  // --- HELPER UNTUK GAMBAR (Supaya Gak Crash) ---
+  // --- HELPER BARU (PEMBERSIH LOCALHOST & SUPAYA GAK CRASH) ---
   const getImageUrl = (url) => {
-    if (!url || url === '') return 'https://placehold.co/150?text=No+Image'
-    if (url.startsWith('http')) return url
-    return `https://changing-carmita-afcodestudio-212bd12d.koyeb.app/${url}`
+    // 1. Kalau kosong, kasih placeholder
+    if (!url || url === "") return 'https://placehold.co/150?text=No+Image'
+
+    // 2. HAPUS 'http://localhost:8081/' atau '8080' kalau kesimpen di database
+    // Ini penting banget biar gak kena Mixed Content Error
+    let cleanUrl = url.replace('http://localhost:8081/', '').replace('http://localhost:8080/', '')
+
+    // 3. Kalau link-nya dari internet beneran (misal google.com), biarin
+    if (cleanUrl.startsWith('http')) return cleanUrl
+
+    // 4. Sisanya tempel ke Koyeb
+    return `https://changing-carmita-afcodestudio-212bd12d.koyeb.app/${cleanUrl}`
   }
 
   // --- VIEW: LOGIN FORM ---
@@ -367,9 +374,7 @@ function AdminDashboard() {
                     <td className="px-6 py-4 flex justify-center gap-2">
                       {order.status === 'Pending' && (
                         <button
-                          onClick={() =>
-                            handleUpdateOrderStatus(order.id, 'Lunas')
-                          }
+                          onClick={() => handleUpdateOrderStatus(order.id, 'Lunas')}
                           className="bg-emerald-500 text-white px-3 py-1 rounded text-xs font-bold hover:bg-emerald-600"
                         >
                           ✅ Terima
@@ -377,9 +382,7 @@ function AdminDashboard() {
                       )}
                       {order.status === 'Lunas' && (
                         <button
-                          onClick={() =>
-                            handleUpdateOrderStatus(order.id, 'Dikirim')
-                          }
+                          onClick={() => handleUpdateOrderStatus(order.id, 'Dikirim')}
                           className="bg-blue-500 text-white px-3 py-1 rounded text-xs font-bold hover:bg-blue-600"
                         >
                           🚚 Kirim
@@ -420,8 +423,7 @@ function AdminDashboard() {
                         alt={product.name}
                         className="w-10 h-10 rounded-lg object-cover bg-slate-200 border border-slate-300"
                         onError={(e) => {
-                          e.target.src =
-                            'https://placehold.co/150?text=No+Image' // Pake placeholder.co biar stabil
+                          e.target.src = 'https://placehold.co/150?text=No+Image' // Pake placeholder.co biar stabil
                         }}
                       />
                     </td>
