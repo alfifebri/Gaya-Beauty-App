@@ -427,9 +427,18 @@ function AdminDashboard() {
                   <tr key={product.id} className="hover:bg-slate-50">
                     <td className="px-6 py-4">
                       <img
-                        src={product.image_url}
-                        alt=""
-                        className="w-10 h-10 rounded-lg object-cover bg-slate-200"
+                        // Kalau linknya udah ada 'http', pake link asli. Kalau belum, tempel link Koyeb di depannya.
+                        src={
+                          product.image_url.startsWith('http')
+                            ? product.image_url
+                            : `https://changing-carmita-afcodestudio-212bd12d.koyeb.app/${product.image_url}`
+                        }
+                        alt={product.name}
+                        className="w-10 h-10 rounded-lg object-cover bg-slate-200 border border-slate-300"
+                        onError={(e) => {
+                          e.target.src =
+                            'https://via.placeholder.com/150?text=No+Image'
+                        }} // Jaga-jaga kalau error
                       />
                     </td>
                     <td className="px-6 py-4 font-bold text-slate-700">
