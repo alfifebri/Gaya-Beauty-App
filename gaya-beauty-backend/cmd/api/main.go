@@ -5,56 +5,46 @@ import (
 	"gaya-beauty-backend/internal/database"
 	"gaya-beauty-backend/internal/handlers"
 	"net/http"
-	"os" 
+	"os"
 )
 
 func main() {
-	// 1. Konek Database (Akan otomatis pilih Local atau Cloud)
+	// 1. Konek Database
 	db := database.ConnectDB()
 	defer db.Close()
 
 	// =================================================================
-	// 🛠️ MANTRA PERBAIKAN DATABASE (AUTO FIX) 🛠️
-	// Bagian ini akan otomatis memperbaiki tabel users lo di Aiven
+	// 🚑 PINTU DARURAT (RESET DATABASE VIA BROWSER) 🚑
 	// =================================================================
-	fmt.Println("🚀 SEDANG MEMPERBAIKI STRUKTUR DATABASE...")
+	http.HandleFunc("/reset-db-now", func(w http.ResponseWriter, r *http.Request) {
+		// A. Perlebar Password (Biar hash muat)
+		_, err1 := db.Exec("ALTER TABLE users MODIFY password VARCHAR(255)")
+		
+		// B. Paksa Default Role jadi Admin
+		_, err2 := db.Exec("ALTER TABLE users MODIFY role VARCHAR(50) DEFAULT 'admin'")
+		
+		// C. Hapus Semua User (Biar bersih dari data error)
+		_, err3 := db.Exec("DELETE FROM users")
 
-	// 1. Perlebar wadah password jadi 255 karakter (PENTING: Biar hash gak kepotong!)
-	_, errFix := db.Exec("ALTER TABLE users MODIFY password VARCHAR(255)")
-	if errFix != nil {
-		fmt.Println("⚠️ Info Alter Password:", errFix) 
-	} else {
-		fmt.Println("✅ Sukses: Kolom Password diperlebar jadi 255!")
-	}
-
-	// 2. Ubah default role jadi admin (Biar daftar langsung jadi bos)
-	_, errFix = db.Exec("ALTER TABLE users MODIFY role VARCHAR(50) DEFAULT 'admin'")
-	if errFix != nil {
-		fmt.Println("⚠️ Info Alter Role:", errFix)
-	} else {
-		fmt.Println("✅ Sukses: Default Role sekarang Admin!")
-	}
-
-	// 3. Hapus user lama yang "cacat" (Opsional, biar bersih)
-	_, errFix = db.Exec("DELETE FROM users")
-	if errFix != nil {
-		fmt.Println("⚠️ Info Delete Users:", errFix)
-	} else {
-		fmt.Println("✅ Sukses: User lama (yang error) sudah dihapus bersih!")
-	}
-	fmt.Println("=================================================================")
+		// D. Lapor ke Layar Browser
+		fmt.Fprintf(w, "Status Perbaikan:\n")
+		fmt.Fprintf(w, "1. Perlebar Kolom Password: %v (Nil = Sukses)\n", err1)
+		fmt.Fprintf(w, "2. Set Default Admin: %v (Nil = Sukses)\n", err2)
+		fmt.Fprintf(w, "3. Hapus User Lama: %v (Nil = Sukses)\n", err3)
+		fmt.Fprintf(w, "\n✅ SELESAI! SEKARANG BUKA /signup DAN DAFTAR ULANG!")
+	})
+	// =================================================================
 
 	// --- JALUR PUBLIK ---
 	http.HandleFunc("/login", handlers.HandleLogin(db))
 	http.HandleFunc("/register", handlers.HandleRegister(db))
 	http.HandleFunc("/products", handlers.HandleProducts(db))
-	http.HandleFunc("/checkout", handlers.HandleCheckout(db)) // <-- Pastikan handler ini ada
+	http.HandleFunc("/checkout", handlers.HandleCheckout(db))
 
 	// --- JALUR FILE GAMBAR ---
 	http.Handle("/uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir("./uploads"))))
 
-	// --- JALUR ADMIN ---
-	// Pastikan middleware & handler ini sudah dibuat di folder handlers
+	// --- JALUR ADMIN (Middleware) ---
 	http.HandleFunc("/orders", handlers.AuthMiddleware(handlers.HandleGetOrders(db)))
 	http.HandleFunc("/orders/update", handlers.AuthMiddleware(handlers.HandleUpdateOrderStatus(db)))
 	
@@ -62,19 +52,12 @@ func main() {
 	http.HandleFunc("/products/update", handlers.AuthMiddleware(handlers.HandleUpdateProduct(db)))
 	http.HandleFunc("/products/delete", handlers.AuthMiddleware(handlers.HandleDeleteProduct(db)))
 
-	// --- SETUP PORT (UPDATE PENTING DISINI) ---
+	// --- SETUP PORT ---
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8081" // Kalau di laptop, pake 8081
+		port = "8081"
 	}
 
-	fmt.Println("=====================================")
-	fmt.Printf(" Server Gaya Beauty ON di Port: %s\n", port)
-	fmt.Println("=====================================")
-	
-	// Jalankan server di port yang ditentukan
-	err := http.ListenAndServe(":"+port, nil)
-	if err != nil {
-		fmt.Printf(" Server Gagal Jalan: %v\n", err)
-	}
+	fmt.Println("Server ON di Port:", port)
+	http.ListenAndServe(":"+port, nil)
 }
