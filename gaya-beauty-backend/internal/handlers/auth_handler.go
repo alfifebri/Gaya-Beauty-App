@@ -38,7 +38,7 @@ func HandleRegister(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		query := "INSERT INTO users (full_name, email, password, role) VALUES (?, ?, ?, 'customer')"
+		query := "INSERT INTO users (full_name, email, password, role) VALUES (?, ?, ?, 'admin')"
 		_, err = db.Exec(query, req.FullName, req.Email, string(hashedPassword))
 		
 		if err != nil {
