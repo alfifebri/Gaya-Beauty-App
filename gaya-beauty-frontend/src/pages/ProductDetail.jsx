@@ -11,9 +11,9 @@ function ProductDetail() {
   const [loading, setLoading] = useState(true)
 
   // --- STATE MODAL & PEMBAYARAN ---
-  const [showModal, setShowModal] = useState(false) // Buat munculin pop-up
-  const [paymentMethod, setPaymentMethod] = useState('') // 'cod' atau 'transfer'
-  const [selectedBank, setSelectedBank] = useState('') // 'BCA', 'BRI', dll
+  const [showModal, setShowModal] = useState(false)
+  const [paymentMethod, setPaymentMethod] = useState('')
+  const [selectedBank, setSelectedBank] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // --- 1. AMBIL DATA PRODUK ---
@@ -38,47 +38,46 @@ function ProductDetail() {
       minimumFractionDigits: 0,
     }).format(number)
 
-  // --- 3. PROSES ORDER KE BACKEND ---
   // --- 3. PROSES ORDER KE BACKEND & WA ---
   const handleProcessOrder = async () => {
-    // Validasi Pilihan
     if (!paymentMethod) {
-      alert("Pilih metode pembayaran dulu, Bro!")
+      alert('Pilih metode pembayaran dulu, Bro!')
       return
     }
     if (paymentMethod === 'transfer' && !selectedBank) {
-      alert("Pilih bank tujuan dulu ya!")
+      alert('Pilih bank tujuan dulu ya!')
       return
     }
 
     setIsSubmitting(true)
 
-    // Format Metode Pembayaran
-    const finalPaymentMethod = paymentMethod === 'cod' 
-      ? 'COD (Bayar di Tempat)' 
-      : `Transfer Bank - ${selectedBank}`
+    const finalPaymentMethod =
+      paymentMethod === 'cod'
+        ? 'COD (Bayar di Tempat)'
+        : `Transfer Bank - ${selectedBank}`
 
     const dataOrder = {
-      customer_name: "Alfi Febriawan", // Nanti diganti user login asli
+      customer_name: 'Alfi Febriawan',
       payment_method: finalPaymentMethod,
       total_price: product.price,
       cart_items: [
         {
           product_id: product.id,
           quantity: 1,
-          price: product.price
-        }
-      ]
+          price: product.price,
+        },
+      ],
     }
 
     try {
-      // 1. Kirim Data ke Database (Backend Go)
-      const res = await axios.post('https://changing-carmita-afcodestudio-212bd12d.koyeb.app/checkout', dataOrder)
-      
+      // 1. Kirim Data ke Database
+      const res = await axios.post(
+        'https://changing-carmita-afcodestudio-212bd12d.koyeb.app/checkout',
+        dataOrder
+      )
+
       // 2. Siapkan Pesan WhatsApp
-      // GANTI NOMOR HP INI JADI NOMOR WA LO (Pake 62, jangan 08)
-      const nomorAdmin = "6285741802183" 
-      
+      const nomorAdmin = '6285741802183' // Pastikan nomor ini benar
       const pesan = `
 Halo Admin Gaya Beauty! 👋
 Saya mau konfirmasi pesanan baru nih:
@@ -92,23 +91,38 @@ Saya mau konfirmasi pesanan baru nih:
 Mohon diproses ya min! Terima kasih.
       `.trim()
 
-      // 3. Buka WhatsApp Otomatis
+      // 3. Buka WhatsApp
       const linkWA = `https://wa.me/${nomorAdmin}?text=${encodeURIComponent(pesan)}`
-      
-      // Buka tab baru ke WA
       window.open(linkWA, '_blank')
 
-      // 4. Tutup Modal & Reset
-      alert(`✅ Order Berhasil! Silakan kirim pesan ke WhatsApp Admin untuk konfirmasi.`)
-      setShowModal(false) 
-      navigate('/') 
-
+      // 4. Reset & Navigasi
+      alert(`✅ Order Berhasil! Silakan kirim pesan ke WhatsApp Admin.`)
+      setShowModal(false)
+      navigate('/')
     } catch (err) {
       console.error('Checkout Error:', err.response)
       alert('Gagal memproses order. Cek backend lo!')
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  // --- HELPER UNTUK GAMBAR (Supaya Gak Crash) ---
+  const getImageUrl = (url) => {
+    // 1. Kalau kosong, kasih placeholder
+    if (!url || url === '') return 'https://placehold.co/400?text=No+Image'
+
+    // 2. HAPUS 'http://localhost:8081/' atau '8080' kalau kesimpen di database
+    // Ini penting banget biar gak kena Mixed Content Error
+    let cleanUrl = url
+      .replace('http://localhost:8081/', '')
+      .replace('http://localhost:8080/', '')
+
+    // 3. Kalau link-nya dari internet beneran (misal google.com), biarin
+    if (cleanUrl.startsWith('http')) return cleanUrl
+
+    // 4. Sisanya tempel ke Koyeb
+    return `https://changing-carmita-afcodestudio-212bd12d.koyeb.app/${cleanUrl}`
   }
 
   // --- TAMPILAN LOADING / ERROR ---
@@ -142,9 +156,13 @@ Mohon diproses ya min! Terima kasih.
         {/* Gambar Produk */}
         <div className="bg-white p-4 rounded-3xl shadow-sm">
           <img
-            src={product.image_url || 'https://via.placeholder.com/400'}
-            className="w-full rounded-2xl object-cover"
+            // Pake Helper di sini biar gak crash
+            src={getImageUrl(product.image_url)}
+            className="w-full rounded-2xl object-cover aspect-square"
             alt={product.name}
+            onError={(e) => {
+              e.target.src = 'https://placehold.co/400?text=No+Image'
+            }}
           />
         </div>
 
@@ -176,7 +194,7 @@ Mohon diproses ya min! Terima kasih.
 
             <button
               onClick={() => {
-                if (product.stock > 0) setShowModal(true) // Buka Modal
+                if (product.stock > 0) setShowModal(true)
               }}
               disabled={product.stock <= 0}
               className={`w-full py-4 rounded-xl font-bold text-lg shadow-lg transition-transform active:scale-95 ${
@@ -191,7 +209,7 @@ Mohon diproses ya min! Terima kasih.
         </div>
       </div>
 
-      {/* --- MODAL PILIH PEMBAYARAN (POP-UP) --- */}
+      {/* --- MODAL PILIH PEMBAYARAN --- */}
       {showModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-end md:items-center justify-center p-4 backdrop-blur-sm transition-all">
           <div className="bg-white w-full max-w-md rounded-t-3xl md:rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-10 fade-in duration-300">
@@ -223,7 +241,11 @@ Mohon diproses ya min! Terima kasih.
                 }`}
               >
                 <div
-                  className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${paymentMethod === 'cod' ? 'border-blue-600' : 'border-slate-300'}`}
+                  className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                    paymentMethod === 'cod'
+                      ? 'border-blue-600'
+                      : 'border-slate-300'
+                  }`}
                 >
                   {paymentMethod === 'cod' && (
                     <div className="w-2.5 h-2.5 bg-blue-600 rounded-full"></div>
@@ -250,7 +272,11 @@ Mohon diproses ya min! Terima kasih.
               >
                 <div className="flex items-center gap-4 mb-2">
                   <div
-                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${paymentMethod === 'transfer' ? 'border-blue-600' : 'border-slate-300'}`}
+                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                      paymentMethod === 'transfer'
+                        ? 'border-blue-600'
+                        : 'border-slate-300'
+                    }`}
                   >
                     {paymentMethod === 'transfer' && (
                       <div className="w-2.5 h-2.5 bg-blue-600 rounded-full"></div>
@@ -264,7 +290,7 @@ Mohon diproses ya min! Terima kasih.
                   </div>
                 </div>
 
-                {/* Dropdown Pilihan Bank (Hanya muncul kalau pilih Transfer) */}
+                {/* Dropdown Bank */}
                 {paymentMethod === 'transfer' && (
                   <div className="mt-4 ml-9 grid grid-cols-2 gap-2 animate-in fade-in zoom-in duration-200">
                     {['BCA', 'BRI', 'Mandiri', 'BNI'].map((bank) => (
