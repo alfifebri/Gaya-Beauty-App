@@ -14,25 +14,30 @@ func main() {
 	defer db.Close()
 
 	// =================================================================
-	// 🚑 PINTU DARURAT 1: RESET DATABASE (Perbaiki Struktur) 🚑
+	// ☢️ PINTU DARURAT 1: RESET TOTAL (DESTROY & REBUILD) ☢️
 	// Akses: [LinkKoyeb]/reset-db-now
 	// =================================================================
 	http.HandleFunc("/reset-db-now", func(w http.ResponseWriter, r *http.Request) {
-		// A. Perlebar Password (Biar hash muat)
-		_, err1 := db.Exec("ALTER TABLE users MODIFY password VARCHAR(255)")
-		
-		// B. Paksa Default Role jadi Admin
-		_, err2 := db.Exec("ALTER TABLE users MODIFY role VARCHAR(50) DEFAULT 'admin'")
-		
-		// C. Hapus Semua User (Biar bersih dari data error)
-		_, err3 := db.Exec("DELETE FROM users")
+		// A. HANCURKAN TABEL LAMA (Karena strukturnya salah/kurang kolom)
+		_, errDrop := db.Exec("DROP TABLE IF EXISTS users")
 
-		// D. Lapor ke Layar Browser
-		fmt.Fprintf(w, "=== STATUS PERBAIKAN DATABASE ===\n")
-		fmt.Fprintf(w, "1. Perlebar Kolom Password (255 chars): %v (Nil = Sukses)\n", err1)
-		fmt.Fprintf(w, "2. Set Default Role ke 'admin': %v (Nil = Sukses)\n", err2)
-		fmt.Fprintf(w, "3. Hapus Semua User Lama: %v (Nil = Sukses)\n", err3)
-		fmt.Fprintf(w, "\n✅ SELESAI! SEKARANG BUKA /signup DAN DAFTAR ULANG!")
+		// B. BANGUN TABEL BARU (Lengkap dengan Role & Password Panjang)
+		queryCreate := `
+		CREATE TABLE users (
+			id INT AUTO_INCREMENT PRIMARY KEY,
+			full_name VARCHAR(100),
+			email VARCHAR(100) UNIQUE NOT NULL,
+			password VARCHAR(255) NOT NULL,
+			role VARCHAR(50) DEFAULT 'admin',
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`
+		_, errCreate := db.Exec(queryCreate)
+
+		// C. Lapor ke Layar Browser
+		fmt.Fprintf(w, "=== STATUS RESET TOTAL (BANGUN ULANG) ===\n")
+		fmt.Fprintf(w, "1. Hancurkan Tabel Lama: %v (Nil = Sukses)\n", errDrop)
+		fmt.Fprintf(w, "2. Bangun Tabel Baru (Ada Role & Password 255): %v (Nil = Sukses)\n", errCreate)
+		fmt.Fprintf(w, "\n✅ SELESAI! TABEL UDAH SEMPURNA. SEKARANG BUKA /signup DAN DAFTAR ULANG!")
 	})
 
 	// =================================================================
@@ -40,9 +45,10 @@ func main() {
 	// Akses: [LinkKoyeb]/cek-user
 	// =================================================================
 	http.HandleFunc("/cek-user", func(w http.ResponseWriter, r *http.Request) {
+		// Sekarang query ini pasti berhasil karena tabel baru udah punya 'role'
 		rows, err := db.Query("SELECT id, email, password, role FROM users")
 		if err != nil {
-			fmt.Fprintf(w, "Gagal ambil data: %v", err)
+			fmt.Fprintf(w, "Gagal ambil data (Mungkin tabel belum di-reset?): %v", err)
 			return
 		}
 		defer rows.Close()
@@ -71,7 +77,7 @@ func main() {
 		fmt.Fprintf(w, "</table>")
 
 		if !found {
-			fmt.Fprintf(w, "<h3>⚠️ DATABASE KOSONG MELOMPONG! (Belum ada yang daftar)</h3>")
+			fmt.Fprintf(w, "<h3>⚠️ DATABASE KOSONG (Belum ada user, silakan daftar dulu!)</h3>")
 		}
 	})
 
