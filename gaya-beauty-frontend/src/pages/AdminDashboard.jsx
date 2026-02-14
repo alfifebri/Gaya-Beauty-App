@@ -141,7 +141,6 @@ function AdminDashboard() {
 
     try {
       const token = localStorage.getItem('token')
-      // Panggil API DELETE yang barusan kita bikin di Go
       await axios.delete(
         `https://changing-carmita-afcodestudio-212bd12d.koyeb.app/products/delete?id=${id}`,
         {
@@ -207,7 +206,7 @@ function AdminDashboard() {
 
       if (isEditing) {
         // --- LOGIC UPDATE ---
-        formData.append('id', editId) // Kirim ID buat update
+        formData.append('id', editId)
         await axios.put(
           'https://changing-carmita-afcodestudio-212bd12d.koyeb.app/products/update',
           formData,
@@ -220,7 +219,7 @@ function AdminDashboard() {
         )
         alert('Produk Berhasil Diupdate! 🎉')
       } else {
-        // --- LOGIC CREATE (FIXED: Tambahin /create di ujung URL) ---
+        // --- LOGIC CREATE ---
         await axios.post(
           'https://changing-carmita-afcodestudio-212bd12d.koyeb.app/products/create',
           formData,
@@ -242,6 +241,18 @@ function AdminDashboard() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // --- HELPER UNTUK GAMBAR (Supaya Gak Crash) ---
+  const getImageUrl = (url) => {
+    // 1. Kalau URL-nya kosong/null, pake gambar default (Placeholder)
+    if (!url) return 'https://via.placeholder.com/150?text=No+Image'
+
+    // 2. Kalau URL-nya udah lengkap (ada http/https), pake itu
+    if (url.startsWith('http')) return url
+
+    // 3. Kalau URL-nya cuma 'uploads/foto.jpg', tambahin domain Koyeb di depannya
+    return `https://changing-carmita-afcodestudio-212bd12d.koyeb.app/${url}`
   }
 
   // --- VIEW: LOGIN FORM ---
@@ -427,18 +438,14 @@ function AdminDashboard() {
                   <tr key={product.id} className="hover:bg-slate-50">
                     <td className="px-6 py-4">
                       <img
-                        // Kalau linknya udah ada 'http', pake link asli. Kalau belum, tempel link Koyeb di depannya.
-                        src={
-                          product.image_url.startsWith('http')
-                            ? product.image_url
-                            : `https://changing-carmita-afcodestudio-212bd12d.koyeb.app/${product.image_url}`
-                        }
+                        // Pake fungsi helper biar aman & gak crash
+                        src={getImageUrl(product.image_url)}
                         alt={product.name}
                         className="w-10 h-10 rounded-lg object-cover bg-slate-200 border border-slate-300"
                         onError={(e) => {
                           e.target.src =
                             'https://via.placeholder.com/150?text=No+Image'
-                        }} // Jaga-jaga kalau error
+                        }}
                       />
                     </td>
                     <td className="px-6 py-4 font-bold text-slate-700">
@@ -449,14 +456,12 @@ function AdminDashboard() {
                     </td>
                     <td className="px-6 py-4 text-sm">{product.stock} pcs</td>
                     <td className="px-6 py-4 flex justify-center gap-2">
-                      {/* TOMBOL EDIT */}
                       <button
                         onClick={() => openModal(product)}
                         className="p-2 text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition"
                       >
                         <FiEdit />
                       </button>
-                      {/* TOMBOL HAPUS */}
                       <button
                         onClick={() => handleDeleteProduct(product.id)}
                         className="p-2 text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition"
@@ -472,7 +477,7 @@ function AdminDashboard() {
         )}
       </div>
 
-      {/* 5. MODAL FORM PRODUK (POP-UP) */}
+      {/* 5. MODAL FORM PRODUK */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
           <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden">
