@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -8,7 +9,44 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/cloudinary/cloudinary-go/v2"
+	"github.com/cloudinary/cloudinary-go/v2/api/uploader"
 )
+
+// --- KONFIGURASI CLOUDINARY (GANTI INI!) ---
+const (
+	CloudName = "dyeme4myg" // Contoh: dyeme4myg
+	ApiKey    = "644544511683593"    // Contoh: 1234567890
+	ApiSecret = "rR2OlZ0VLwsCYcHqi5jQrCu85yU" // Contoh: abcde_12345
+)
+
+// --- FUNGSI HELPER UPLOAD KE CLOUDINARY ---
+func uploadToCloudinary(file io.Reader, filename string) (string, error) {
+	ctx := context.Background()
+
+	// 1. Buat Koneksi ke Cloudinary
+	cld, err := cloudinary.NewFromParams(CloudName, ApiKey, ApiSecret)
+	if err != nil {
+		return "", fmt.Errorf("gagal konek cloudinary: %v", err)
+	}
+
+	// 2. Upload File
+	// Kita pake nama file unik biar gak ketimpa
+	uniqueFilename := fmt.Sprintf("gaya-beauty/%d-%s", time.Now().Unix(), filename)
+
+	resp, err := cld.Upload.Upload(ctx, file, uploader.UploadParams{
+		PublicID: uniqueFilename,
+		Folder:   "gaya_beauty_products", // Nama folder di Cloudinary
+	})
+
+	if err != nil {
+		return "", fmt.Errorf("gagal upload ke cloudinary: %v", err)
+	}
+
+	// 3. Balikin URL HTTPS yang aman
+	return resp.SecureURL, nil
+}
 
 // --- STRUCT DATA ---
 
@@ -51,11 +89,6 @@ func HandleProducts(db *sql.DB) http.HandlerFunc {
 
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		if r.Method != "GET" {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
@@ -105,34 +138,31 @@ func HandleCreateProduct(db *sql.DB) http.HandlerFunc {
 		category := r.FormValue("category")
 		description := r.FormValue("description")
 
-		// Proses Upload Gambar
+		// Proses Upload Gambar ke Cloudinary
 		file, handler, err := r.FormFile("image")
 		var imagePath string
 
 		if err == nil {
 			defer file.Close()
-			// Bikin nama file unik
-			filename := fmt.Sprintf("%d-%s", time.Now().Unix(), handler.Filename)
 			
-			// Pastikan folder uploads ada
-			os.MkdirAll("./uploads", os.ModePerm)
-
-			dst, err := os.Create("./uploads/" + filename)
+			// 🔥 UPLOAD KE CLOUDINARY 🔥
+			fmt.Println("Mengupload ke Cloudinary...", handler.Filename)
+			uploadedURL, err := uploadToCloudinary(file, handler.Filename)
+			
 			if err != nil {
-				fmt.Println("❌ Gagal buat file:", err)
-				http.Error(w, "Gagal simpan file", http.StatusInternalServerError)
+				fmt.Println("❌ Gagal Upload Cloudinary:", err)
+				http.Error(w, "Gagal upload gambar ke cloud", http.StatusInternalServerError)
 				return
 			}
-			defer dst.Close()
-
-			io.Copy(dst, file)
-			imagePath = "http://localhost:8081/uploads/" + filename
+			
+			imagePath = uploadedURL
+			fmt.Println("✅ Sukses Upload:", imagePath)
 		} else {
 			// Gambar default kalau user gak upload
-			imagePath = "https://via.placeholder.com/400?text=No+Image"
+			imagePath = "https://placehold.co/400?text=No+Image"
 		}
 
-		// Masukkan ke Database
+		// Masukkan ke Database (Simpan Link Cloudinary)
 		query := "INSERT INTO products (name, price, stock, category, description, image_url) VALUES (?, ?, ?, ?, ?, ?)"
 		_, err = db.Exec(query, name, price, stock, category, description, imagePath)
 
@@ -173,13 +203,20 @@ func HandleUpdateProduct(db *sql.DB) http.HandlerFunc {
 
 		if err == nil {
 			defer file.Close()
-			filename := fmt.Sprintf("%d-%s", time.Now().Unix(), handler.Filename)
-			dst, _ := os.Create("./uploads/" + filename)
-			defer dst.Close()
-			io.Copy(dst, file)
-			imagePath = "http://localhost:8081/uploads/" + filename
+			
+			// 🔥 UPLOAD KE CLOUDINARY (Lagi) 🔥
+			fmt.Println("Mengupload Update ke Cloudinary...", handler.Filename)
+			uploadedURL, err := uploadToCloudinary(file, handler.Filename)
 
-			// Update dengan gambar baru
+			if err != nil {
+				fmt.Println("❌ Gagal Upload Update:", err)
+				http.Error(w, "Gagal upload gambar update", http.StatusInternalServerError)
+				return
+			}
+			
+			imagePath = uploadedURL
+			
+			// Update dengan gambar baru (Link Cloudinary)
 			_, err = db.Exec("UPDATE products SET name=?, price=?, stock=?, category=?, description=?, image_url=? WHERE id=?", 
 				name, price, stock, category, description, imagePath, id)
 		} else {
@@ -212,7 +249,6 @@ func HandleDeleteProduct(db *sql.DB) http.HandlerFunc {
 
 		id := r.URL.Query().Get("id")
 		if id == "" {
-			// Coba ambil dari form body kalau query params kosong
 			id = r.FormValue("id")
 		}
 
@@ -250,7 +286,6 @@ func HandleCheckout(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		// Simpan Order Utama
 		res, err := db.Exec("INSERT INTO orders (customer_name, total_price, payment_method, status) VALUES (?, ?, ?, 'Pending')", 
 			req.CustomerName, req.TotalPrice, req.PaymentMethod)
 		
@@ -262,12 +297,10 @@ func HandleCheckout(db *sql.DB) http.HandlerFunc {
 
 		orderID, _ := res.LastInsertId()
 
-		// Simpan Detail Item & Kurangi Stok
 		for _, item := range req.CartItems {
 			db.Exec("INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)", 
 				orderID, item.ProductID, item.Quantity, item.Price)
 			
-			// Kurangi stok
 			db.Exec("UPDATE products SET stock = stock - ? WHERE id = ?", item.Quantity, item.ProductID)
 		}
 
@@ -339,19 +372,10 @@ func HandleUpdateOrderStatus(db *sql.DB) http.HandlerFunc {
 	}
 }
 
-// --- 8. HANDLER UPLOAD SIMPLE (Opsional) ---
+// --- 8. HANDLER UPLOAD SIMPLE (Biar Gak Error di Main) ---
+// Ini udah gak dipake sebenernya, tapi dibiarin biar main.go gak error
 func HandleUpload(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	if r.Method != "POST" { return }
-
-	file, header, _ := r.FormFile("image")
-	defer file.Close()
-	
-	os.MkdirAll("./uploads", os.ModePerm)
-	dst, _ := os.Create("./uploads/" + header.Filename)
-	defer dst.Close()
-	io.Copy(dst, file)
-
-	url := "http://localhost:8081/uploads/" + header.Filename
-	w.Write([]byte(`{"url": "` + url + `"}`))
+	// Kosongin aja karena kita udah pake Cloudinary di handler produk
+	w.Write([]byte(`{"message": "Upload via Handler Produk ya!"}`))
 }
