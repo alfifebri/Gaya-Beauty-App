@@ -101,6 +101,8 @@ func main() {
 	http.HandleFunc("/register", handlers.HandleRegister(db))
 	http.HandleFunc("/products", handlers.HandleProducts(db)) 
 	http.HandleFunc("/checkout", handlers.HandleCheckout(db))
+	http.HandleFunc("/my-orders", handlers.HandleGetMyOrders(db))
+	http.HandleFunc("/complete-order", handlers.HandleCompleteOrder(db))
 
 	// ---> TAMBAHAN BARU SYARAT 2 (CUSTOMER) <---
   http.HandleFunc("/customer/register", handlers.HandleCustomerRegister(db))

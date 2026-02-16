@@ -109,4 +109,67 @@ func HandleCheckout(db *sql.DB) http.HandlerFunc {
 			"status":   "Pending",
 		})
 	}
+	// === BARU: AMBIL PESANAN SAYA (KHUSUS CUSTOMER) ===
+func HandleGetMyOrders(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+
+		// Ambil Customer ID dari URL param (misal: /my-orders?user_id=5)
+		customerID := r.URL.Query().Get("user_id")
+
+		rows, err := db.Query("SELECT id, total_price, status, created_at FROM orders WHERE customer_id = ? ORDER BY created_at DESC", customerID)
+		if err != nil {
+			http.Error(w, "Gagal ambil data", http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		var orders []map[string]interface{}
+		for rows.Next() {
+			var id int
+			var totalPrice float64
+			var status, createdAt string
+			rows.Scan(&id, &totalPrice, &status, &createdAt)
+
+			orders = append(orders, map[string]interface{}{
+				"id":          id,
+				"total_price": totalPrice,
+				"status":      status,
+				"created_at":  createdAt,
+			})
+		}
+
+		json.NewEncoder(w).Encode(orders)
+	}
+}
+
+// === BARU: CUSTOMER KONFIRMASI TERIMA BARANG ===
+func HandleCompleteOrder(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+        w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+        if r.Method == "OPTIONS" { w.WriteHeader(http.StatusOK); return }
+
+		var req struct {
+			OrderID int `json:"order_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Data salah", http.StatusBadRequest)
+			return
+		}
+
+		// Ubah status jadi 'Selesai'
+		_, err := db.Exec("UPDATE orders SET status = 'Selesai' WHERE id = ?", req.OrderID)
+		if err != nil {
+			http.Error(w, "Gagal update status", http.StatusInternalServerError)
+			return
+		}
+
+		json.NewEncoder(w).Encode(map[string]string{"message": "Terima kasih! Pesanan selesai."})
+	}
+}
 }
