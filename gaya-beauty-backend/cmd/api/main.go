@@ -102,6 +102,10 @@ func main() {
 	http.HandleFunc("/products", handlers.HandleProducts(db)) 
 	http.HandleFunc("/checkout", handlers.HandleCheckout(db))
 
+	// ---> TAMBAHAN BARU SYARAT 2 (CUSTOMER) <---
+  http.HandleFunc("/customer/register", handlers.HandleCustomerRegister(db))
+  http.HandleFunc("/customer/login", handlers.HandleCustomerLogin(db))
+
 	// --- JALUR FILE GAMBAR ---
 	http.Handle("/uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir("./uploads"))))
 
