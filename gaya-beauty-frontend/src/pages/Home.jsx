@@ -14,6 +14,7 @@ function Home() {
   const [showCart, setShowCart] = useState(false)
   const [paymentMethod, setPaymentMethod] = useState('COD')
   const [loading, setLoading] = useState(true)
+  const [toast, setToast] = useState(null) // Notifikasi Pop-up
 
   // --- STATE FILTER ---
   const [search, setSearch] = useState('')
@@ -29,6 +30,14 @@ function Home() {
     }
     fetchProducts()
   }, [])
+
+  // Efek buat ngilangin notif otomatis setelah 3 detik
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [toast])
 
   const fetchProducts = async () => {
     try {
@@ -58,7 +67,7 @@ function Home() {
       (categoryFilter === 'Semua' || p.category === categoryFilter)
   )
 
-  // 4. LOGIKA ADD TO CART
+  // 4. LOGIKA ADD TO CART (DENGAN NOTIFIKASI ALA TIKTOK)
   const addToCart = (product) => {
     if (!user) {
       alert('Eits, Login dulu dong cantik biar bisa belanja! 😉')
@@ -76,7 +85,22 @@ function Home() {
     } else {
       setCart([...cart, { ...product, qty: 1 }])
     }
-    setShowCart(true)
+
+    // 🔥 Munculin Notif, Gak Langsung Buka Sidebar
+    setToast(`✅ ${product.name} berhasil masuk keranjang!`)
+  }
+
+  // 🔥 FITUR BARU: TOMBOL TAMBAH & KURANG (+ / -)
+  const updateQty = (id, amount) => {
+    setCart(
+      cart.map((item) => {
+        if (item.id === id) {
+          const newQty = item.qty + amount
+          return newQty > 0 ? { ...item, qty: newQty } : item
+        }
+        return item
+      })
+    )
   }
 
   const removeFromCart = (id) => {
@@ -90,16 +114,6 @@ function Home() {
     if (!user) {
       alert('Sesi habis, silakan login ulang.')
       navigate('/login-member')
-      return
-    }
-
-    const anyOutOfStock = cart.some((item) => {
-      const p = products.find((prod) => prod.id === item.id)
-      return !p || p.stock <= 0
-    })
-
-    if (anyOutOfStock) {
-      alert('Ada produk yang stoknya habis. Hapus dulu dari keranjang ya!')
       return
     }
 
@@ -119,13 +133,13 @@ function Home() {
       setCart([])
       setShowCart(false)
       fetchProducts()
+      navigate('/my-orders')
     } catch (err) {
       console.error(err)
-      alert('Checkout Gagal. Cek koneksi internet.')
+      alert('Checkout Gagal. Periksa alamat API di Vercel lo Bro!')
     }
   }
 
-  // 6. LOGIKA LOGOUT
   const handleLogout = () => {
     localStorage.removeItem('customer_user')
     setUser(null)
@@ -141,12 +155,18 @@ function Home() {
     }).format(number)
 
   return (
-    <div className="min-h-screen bg-pink-50 font-sans text-gray-800">
-      {/* === NAVBAR LUXURY === */}
+    <div className="min-h-screen bg-pink-50 font-sans text-gray-800 relative">
+      {/* === NOTIFIKASI TOAST (POP-UP BAWAH) === */}
+      {toast && (
+        <div className="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-black/80 text-white px-6 py-3 rounded-full shadow-2xl z-[200] animate-bounce transition-all text-sm font-bold flex items-center gap-2">
+          {toast}
+        </div>
+      )}
+
+      {/* === NAVBAR === */}
       <nav className="bg-white shadow-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row justify-between items-center h-auto md:h-20 py-4 gap-4">
-            {/* Logo */}
             <div
               className="flex-shrink-0 flex items-center cursor-pointer"
               onClick={() => navigate('/')}
@@ -156,7 +176,6 @@ function Home() {
               </span>
             </div>
 
-            {/* Search Bar */}
             <div className="flex-1 max-w-lg w-full relative">
               <input
                 type="text"
@@ -167,20 +186,15 @@ function Home() {
               />
             </div>
 
-            {/* User & Cart Menu */}
             <div className="flex items-center space-x-4">
               {user ? (
-                // === TAMPILAN SUDAH LOGIN ===
                 <div className="flex items-center gap-3">
-                  {/* TOMBOL BARU: PESANAN SAYA (Link ke halaman tracking) */}
                   <button
                     onClick={() => navigate('/my-orders')}
                     className="bg-white border border-pink-200 text-pink-500 px-3 py-1.5 rounded-full text-xs font-bold hover:bg-pink-50 transition shadow-sm flex items-center gap-1"
                   >
                     📦 Pesanan Saya
                   </button>
-                  {/* ================================================= */}
-
                   <div className="hidden md:block text-right">
                     <p className="text-[10px] text-gray-500 uppercase tracking-wider">
                       Halo,
@@ -197,7 +211,6 @@ function Home() {
                   </button>
                 </div>
               ) : (
-                // === TAMPILAN BELUM LOGIN ===
                 <div className="flex gap-2">
                   <button
                     onClick={() => navigate('/login-member')}
@@ -214,7 +227,6 @@ function Home() {
                 </div>
               )}
 
-              {/* Tombol Keranjang */}
               <button
                 onClick={() => setShowCart(true)}
                 className="relative p-2 bg-pink-100 rounded-full text-pink-600 hover:bg-pink-200 transition"
@@ -222,7 +234,7 @@ function Home() {
                 🛒
                 {cart.length > 0 && (
                   <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full font-bold shadow-sm">
-                    {cart.length}
+                    {cart.reduce((a, c) => a + c.qty, 0)}
                   </span>
                 )}
               </button>
@@ -237,30 +249,12 @@ function Home() {
           <button
             key={cat}
             onClick={() => setCategoryFilter(cat)}
-            className={`px-5 py-2 rounded-full text-xs font-bold whitespace-nowrap border transition shadow-sm ${
-              categoryFilter === cat
-                ? 'bg-pink-500 text-white border-pink-500 shadow-pink-200'
-                : 'bg-white text-gray-500 border-gray-100 hover:border-pink-300 hover:text-pink-500'
-            }`}
+            className={`px-5 py-2 rounded-full text-xs font-bold whitespace-nowrap border transition shadow-sm ${categoryFilter === cat ? 'bg-pink-500 text-white border-pink-500' : 'bg-white text-gray-500 border-gray-100'}`}
           >
             {cat}
           </button>
         ))}
       </div>
-
-      {/* === HERO BANNER === */}
-      {categoryFilter === 'Semua' && !search && (
-        <div className="max-w-7xl mx-auto px-4 mb-8">
-          <div className="bg-gradient-to-r from-pink-400 to-purple-500 rounded-2xl p-8 text-white text-center shadow-lg">
-            <h1 className="text-2xl md:text-4xl font-bold mb-2">
-              Diskon Spesial Member Baru!
-            </h1>
-            <p className="text-pink-100">
-              Daftar sekarang dan dapatkan promo menarik.
-            </p>
-          </div>
-        </div>
-      )}
 
       {/* === GRID PRODUK === */}
       <main className="max-w-7xl mx-auto px-4 pb-20">
@@ -268,18 +262,13 @@ function Home() {
           <div className="flex justify-center py-20">
             <div className="animate-spin text-4xl">🌸</div>
           </div>
-        ) : filteredProducts.length === 0 ? (
-          <div className="text-center py-20 text-gray-400 italic">
-            Produk tidak ditemukan...
-          </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {filteredProducts.map((p) => (
               <div
                 key={p.id}
-                className="bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden border border-pink-50 group"
+                className="bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 border border-pink-50 overflow-hidden group"
               >
-                {/* Gambar */}
                 <div
                   className="relative aspect-square overflow-hidden cursor-pointer"
                   onClick={() => navigate(`/product/${p.id}`)}
@@ -288,18 +277,13 @@ function Home() {
                     src={getImageUrl(p.image_url)}
                     alt={p.name}
                     className="w-full h-full object-cover group-hover:scale-110 transition duration-500"
-                    onError={(e) => {
-                      e.target.src = 'https://placehold.co/150?text=No+Image'
-                    }}
                   />
                   {p.stock <= 0 && (
-                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white font-bold">
+                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white font-bold text-xs">
                       STOK HABIS
                     </div>
                   )}
                 </div>
-
-                {/* Info Produk */}
                 <div className="p-4">
                   <span className="text-[10px] font-bold text-pink-400 uppercase tracking-widest">
                     {p.category}
@@ -310,10 +294,9 @@ function Home() {
                   <p className="text-yellow-600 font-extrabold text-lg mb-3">
                     {formatRupiah(p.price)}
                   </p>
-
                   <button
                     onClick={() => addToCart(p)}
-                    className="w-full bg-white border-2 border-pink-500 text-pink-600 py-2 rounded-xl text-xs font-bold hover:bg-pink-500 hover:text-white transition-all shadow-sm disabled:opacity-50 disabled:border-gray-300 disabled:text-gray-400"
+                    className="w-full bg-white border-2 border-pink-500 text-pink-600 py-2 rounded-xl text-xs font-bold hover:bg-pink-500 hover:text-white transition-all shadow-sm"
                     disabled={p.stock <= 0}
                   >
                     {p.stock > 0 ? '+ Keranjang' : 'Habis'}
@@ -325,7 +308,7 @@ function Home() {
         )}
       </main>
 
-      {/* === SIDEBAR KERANJANG === */}
+      {/* === SIDEBAR KERANJANG (+ / -) === */}
       {showCart && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex justify-end backdrop-blur-sm">
           <div className="bg-white w-full sm:w-[400px] h-full flex flex-col animate-in slide-in-from-right duration-300 shadow-2xl">
@@ -344,72 +327,63 @@ function Home() {
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
               {cart.length === 0 ? (
                 <div className="text-center py-20 text-gray-400 italic text-sm">
-                  Masih kosong nih...
+                  Keranjang kosong...
                 </div>
               ) : (
-                cart.map((item) => {
-                  const liveProduct = products.find((p) => p.id === item.id)
-                  const isOutOfStock = !liveProduct || liveProduct.stock <= 0
-                  return (
-                    <div
-                      key={item.id}
-                      className="flex justify-between items-center bg-white p-3 rounded-xl border border-pink-100 shadow-sm"
-                    >
-                      <div className={isOutOfStock ? 'opacity-50' : ''}>
-                        <p
-                          className={`font-bold text-sm ${isOutOfStock ? 'line-through text-red-500' : 'text-gray-800'}`}
+                cart.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex justify-between items-center bg-white p-3 rounded-xl border border-pink-100 shadow-sm"
+                  >
+                    <div className="flex-1">
+                      <p className="font-bold text-sm text-gray-800 truncate">
+                        {item.name}
+                      </p>
+                      <p className="text-xs text-gray-400 mb-2">
+                        {formatRupiah(item.price)}
+                      </p>
+
+                      {/* 🔥 TOMBOL TAMBAH KURANG JUMLAH 🔥 */}
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => updateQty(item.id, -1)}
+                          className="w-6 h-6 rounded bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold"
                         >
-                          {item.name}
-                        </p>
-                        <p className="text-xs text-pink-500 font-medium">
-                          {item.qty} x {formatRupiah(item.price)}
-                        </p>
+                          -
+                        </button>
+                        <span className="text-sm font-bold text-gray-800">
+                          {item.qty}
+                        </span>
+                        <button
+                          onClick={() => updateQty(item.id, 1)}
+                          className="w-6 h-6 rounded bg-pink-100 hover:bg-pink-200 text-pink-600 font-bold"
+                        >
+                          +
+                        </button>
                       </div>
-                      <button
-                        onClick={() => removeFromCart(item.id)}
-                        className="text-red-400 text-xs hover:bg-red-50 px-2 py-1 rounded transition"
-                      >
-                        Hapus
-                      </button>
                     </div>
-                  )
-                })
+                    <button
+                      onClick={() => removeFromCart(item.id)}
+                      className="text-red-400 text-xs hover:bg-red-50 px-2 py-1 rounded transition ml-2"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                ))
               )}
             </div>
 
-            <div className="p-6 bg-white border-t border-pink-100 shadow-[0_-10px_30px_rgba(0,0,0,0.03)]">
-              <div className="mb-4">
-                <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">
-                  Metode Pembayaran
-                </p>
-                <div className="flex gap-2">
-                  {['COD', 'M-Banking'].map((method) => (
-                    <button
-                      key={method}
-                      onClick={() => setPaymentMethod(method)}
-                      className={`flex-1 py-2 text-xs font-bold rounded-lg border transition ${
-                        paymentMethod === method
-                          ? 'bg-pink-600 text-white border-pink-600'
-                          : 'bg-white text-gray-500 border-gray-200 hover:border-pink-300'
-                      }`}
-                    >
-                      {method}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
+            <div className="p-6 bg-white border-t border-pink-100">
               <div className="flex justify-between items-center mb-4">
-                <span className="text-gray-600 font-medium">Total</span>
+                <span className="text-gray-600 font-medium">Total Tagihan</span>
                 <span className="text-xl font-black text-pink-600">
                   {formatRupiah(totalPrice)}
                 </span>
               </div>
-
               <button
                 onClick={handleCheckout}
                 disabled={cart.length === 0}
-                className="w-full bg-pink-600 text-white py-3 rounded-xl font-bold hover:bg-pink-700 disabled:bg-gray-200 disabled:text-gray-400 transition shadow-lg shadow-pink-200"
+                className="w-full bg-pink-600 text-white py-3 rounded-xl font-bold hover:bg-pink-700 shadow-lg shadow-pink-200"
               >
                 Bayar Sekarang
               </button>
