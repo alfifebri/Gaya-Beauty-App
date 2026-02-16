@@ -18,14 +18,15 @@ type CheckoutRequest struct {
 
 // struktur data untuk setiap item di keranjang belanjaan
 type CartItemData struct {
-	ProductID int     `json:"product_id"` 
+	ProductID int     `json:"product_id"`
 	Quantity  int     `json:"quantity"`
 	Price     float64 `json:"price"`
 }
 
+// === 1. HANDLE CHECKOUT (PROSES BELI) ===
 func HandleCheckout(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// 1. SETUP CORS (Wajib biar Frontend gak ditolak)
+		// 1. SETUP CORS
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
@@ -41,52 +42,47 @@ func HandleCheckout(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		// 2. BACA DATA DARI FRONTEND
+		// 2. BACA DATA
 		var req CheckoutRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "Data belanjaan error/tidak lengkap", http.StatusBadRequest)
 			return
 		}
 
-		// ==========================================================
-		// 🛑 MULAI TRANSAKSI DATABASE (SAFETY LOCK)
-		// Biar kalau error di tengah jalan, semua dibatalkan (Rollback)
-		// ==========================================================
+		// 3. MULAI TRANSAKSI
 		tx, err := db.Begin()
 		if err != nil {
 			http.Error(w, "Gagal memulai transaksi", http.StatusInternalServerError)
 			return
 		}
 
-		// 3. SIMPAN KE TABEL ORDERS (Header Pesanan)
-		// Status default 'Pending'
-		res, err := tx.Exec("INSERT INTO orders (customer_id, total_price, status, created_at) VALUES (?, ?, 'Pending', NOW())", 
+		// 4. SIMPAN ORDER HEADER
+		res, err := tx.Exec("INSERT INTO orders (customer_id, total_price, status, created_at) VALUES (?, ?, 'Pending', NOW())",
 			req.CustomerID, req.TotalPrice)
-		
+
 		if err != nil {
-			tx.Rollback() // Batalkan semua!
+			tx.Rollback()
 			log.Println("Error Insert Order:", err)
 			http.Error(w, "Gagal membuat pesanan", http.StatusInternalServerError)
 			return
 		}
 
-		// Ambil ID Order yang barusan dibuat
 		orderID, _ := res.LastInsertId()
 
-		// 4. LOOPING BARANG BELANJAAN
+		// 5. LOOPING BARANG & POTONG STOK
 		for _, item := range req.CartItems {
-			// A. Masukin ke tabel order_items (Rincian)
+			// Masukin ke order_items
 			_, err := tx.Exec("INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)",
 				orderID, item.ProductID, item.Quantity, item.Price)
-			
+
 			if err != nil {
-				tx.Rollback() // Batalkan semua!
+				tx.Rollback()
 				log.Println("Error Insert Item:", err)
 				http.Error(w, "Gagal menyimpan rincian barang", http.StatusInternalServerError)
 				return
 			}
 
-			// B. POTONG STOK PRODUK (PENTING!)
+			// Potong Stok
 			_, err = tx.Exec("UPDATE products SET stock = stock - ? WHERE id = ?", item.Quantity, item.ProductID)
 			if err != nil {
 				tx.Rollback()
@@ -96,26 +92,26 @@ func HandleCheckout(db *sql.DB) http.HandlerFunc {
 			}
 		}
 
-		// 5. SEMUA SUKSES? COMMIT (SIMPAN PERMANEN)
+		// 6. COMMIT TRANSAKSI
 		if err := tx.Commit(); err != nil {
 			http.Error(w, "Gagal finalisasi transaksi", http.StatusInternalServerError)
 			return
 		}
 
-		// 6. KABARI FRONTEND
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"message":  "Checkout Berhasil!",
 			"order_id": orderID,
 			"status":   "Pending",
 		})
 	}
-	// === BARU: AMBIL PESANAN SAYA (KHUSUS CUSTOMER) ===
+} // <--- INI DIA YANG TADI HILANG! (Penutup HandleCheckout)
+
+// === 2. AMBIL PESANAN SAYA (KHUSUS CUSTOMER) ===
 func HandleGetMyOrders(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 
-		// Ambil Customer ID dari URL param (misal: /my-orders?user_id=5)
 		customerID := r.URL.Query().Get("user_id")
 
 		rows, err := db.Query("SELECT id, total_price, status, created_at FROM orders WHERE customer_id = ? ORDER BY created_at DESC", customerID)
@@ -140,19 +136,27 @@ func HandleGetMyOrders(db *sql.DB) http.HandlerFunc {
 			})
 		}
 
+		// PENTING: Kalau kosong, inisialisasi biar jadi [] bukan null
+		if orders == nil {
+			orders = []map[string]interface{}{}
+		}
+
 		json.NewEncoder(w).Encode(orders)
 	}
 }
 
-// === BARU: CUSTOMER KONFIRMASI TERIMA BARANG ===
+// === 3. CUSTOMER KONFIRMASI TERIMA BARANG ===
 func HandleCompleteOrder(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-        w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
-        if r.Method == "OPTIONS" { w.WriteHeader(http.StatusOK); return }
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 
 		var req struct {
 			OrderID int `json:"order_id"`
@@ -162,7 +166,6 @@ func HandleCompleteOrder(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		// Ubah status jadi 'Selesai'
 		_, err := db.Exec("UPDATE orders SET status = 'Selesai' WHERE id = ?", req.OrderID)
 		if err != nil {
 			http.Error(w, "Gagal update status", http.StatusInternalServerError)
@@ -171,5 +174,4 @@ func HandleCompleteOrder(db *sql.DB) http.HandlerFunc {
 
 		json.NewEncoder(w).Encode(map[string]string{"message": "Terima kasih! Pesanan selesai."})
 	}
-}
 }
