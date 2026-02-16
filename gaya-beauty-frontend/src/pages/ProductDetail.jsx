@@ -6,22 +6,27 @@ function ProductDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
 
-  // --- STATE DATA PRODUK ---
+  // --- STATE ---
   const [product, setProduct] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState(null) // Data User Login
 
-  // --- STATE MODAL & PEMBAYARAN ---
+  // --- MODAL & PAYMENT ---
   const [showModal, setShowModal] = useState(false)
   const [paymentMethod, setPaymentMethod] = useState('')
   const [selectedBank, setSelectedBank] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // --- 1. AMBIL DATA PRODUK ---
+  // 1. CEK USER & AMBIL PRODUK
   useEffect(() => {
-    setProduct(null)
+    // Cek User Login
+    const storedUser = localStorage.getItem('customer_user')
+    if (storedUser) setUser(JSON.parse(storedUser))
+
+    // Ambil Produk
     setLoading(true)
     axios
-      .get('https://changing-carmita-afcodestudio-212bd12d.koyeb.app/products')
+      .get(`${import.meta.env.VITE_API_URL}/products`)
       .then((res) => {
         const found = res.data.find((p) => p.id === parseInt(id))
         setProduct(found || null)
@@ -30,205 +35,193 @@ function ProductDetail() {
       .finally(() => setLoading(false))
   }, [id])
 
-  // --- 2. FORMAT RUPIAH ---
-  const formatRupiah = (number) =>
+  // 2. FORMAT RUPIAH
+  const formatRupiah = (num) =>
     new Intl.NumberFormat('id-ID', {
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0,
-    }).format(number)
+    }).format(num)
 
-  // --- 3. PROSES ORDER KE BACKEND & WA ---
+  // 3. PROSES CHECKOUT
   const handleProcessOrder = async () => {
-    if (!paymentMethod) {
-      alert('Pilih metode pembayaran dulu, Bro!')
+    // Validasi Login
+    if (!user) {
+      alert('Eits, login dulu dong Kak biar mesennya gampang! 😉')
+      navigate('/login-member')
       return
     }
-    if (paymentMethod === 'transfer' && !selectedBank) {
-      alert('Pilih bank tujuan dulu ya!')
-      return
-    }
+
+    // Validasi Pilihan
+    if (!paymentMethod) return alert('Pilih metode pembayaran dulu ya!')
+    if (paymentMethod === 'transfer' && !selectedBank)
+      return alert('Pilih bank tujuan dulu!')
 
     setIsSubmitting(true)
 
-    const finalPaymentMethod =
+    const finalMethod =
       paymentMethod === 'cod'
         ? 'COD (Bayar di Tempat)'
         : `Transfer Bank - ${selectedBank}`
 
     const dataOrder = {
-      customer_name: 'Alfi Febriawan',
-      payment_method: finalPaymentMethod,
+      customer_id: user.id, // Ambil ID User asli
+      customer_name: user.full_name, // Ambil Nama User asli
+      payment_method: finalMethod,
       total_price: product.price,
       cart_items: [
-        {
-          product_id: product.id,
-          quantity: 1,
-          price: product.price,
-        },
+        { product_id: product.id, quantity: 1, price: product.price },
       ],
     }
 
     try {
-      // 1. Kirim Data ke Database
+      // Kirim ke Backend
       const res = await axios.post(
-        'https://changing-carmita-afcodestudio-212bd12d.koyeb.app/checkout',
+        `${import.meta.env.VITE_API_URL}/checkout`,
         dataOrder
       )
 
-      // 2. Siapkan Pesan WhatsApp
-      const nomorAdmin = '6285741802183' // Pastikan nomor ini benar
-      const pesan = `
-Halo Admin Gaya Beauty! 👋
-Saya mau konfirmasi pesanan baru nih:
+      // Format Pesan WA
+      const nomorAdmin = '6285741802183'
+      const pesan = `Halo Admin Gaya Beauty! 🌸\nSaya mau konfirmasi pesanan:\n\n🛍️ *Produk:* ${product.name}\n💰 *Harga:* ${formatRupiah(product.price)}\n👤 *Nama:* ${user.full_name}\n💳 *Bayar:* ${finalMethod}\n🆔 *Order ID:* ${res.data.order_id || 'Baru'}\n\nMohon diproses ya! ✨`
 
- *Produk:* ${product.name}
- *Harga:* ${formatRupiah(product.price)}
- *Nama:* ${dataOrder.customer_name}
- *Bayar via:* ${finalPaymentMethod}
- *ID Order:* ${res.data.order_id || 'Baru'}
+      window.open(
+        `https://wa.me/${nomorAdmin}?text=${encodeURIComponent(pesan)}`,
+        '_blank'
+      )
 
-Mohon diproses ya min! Terima kasih.
-      `.trim()
-
-      // 3. Buka WhatsApp
-      const linkWA = `https://wa.me/${nomorAdmin}?text=${encodeURIComponent(pesan)}`
-      window.open(linkWA, '_blank')
-
-      // 4. Reset & Navigasi
-      alert(`✅ Order Berhasil! Silakan kirim pesan ke WhatsApp Admin.`)
+      alert('✅ Pesanan Berhasil! Jangan lupa chat Admin ya.')
       setShowModal(false)
-      navigate('/')
+      navigate('/my-orders')
     } catch (err) {
-      console.error('Checkout Error:', err.response)
-      alert('Gagal memproses order. Cek backend lo!')
+      console.error(err)
+      alert('Yah gagal... Cek koneksi atau coba lagi nanti ya!')
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  // --- HELPER UNTUK GAMBAR (Supaya Gak Crash) ---
+  // 4. HELPER GAMBAR
   const getImageUrl = (url) => {
-    // 1. Kalau kosong, kasih placeholder
-    if (!url || url === '') return 'https://placehold.co/400?text=No+Image'
-
-    // 2. HAPUS 'http://localhost:8081/' atau '8080' kalau kesimpen di database
-    // Ini penting banget biar gak kena Mixed Content Error
+    if (!url) return 'https://placehold.co/400?text=No+Image'
     let cleanUrl = url
       .replace('http://localhost:8081/', '')
       .replace('http://localhost:8080/', '')
-
-    // 3. Kalau link-nya dari internet beneran (misal google.com), biarin
-    if (cleanUrl.startsWith('http')) return cleanUrl
-
-    // 4. Sisanya tempel ke Koyeb
-    return `https://changing-carmita-afcodestudio-212bd12d.koyeb.app/${cleanUrl}`
+    return cleanUrl.startsWith('http')
+      ? cleanUrl
+      : `${import.meta.env.VITE_API_URL}/${cleanUrl}`
   }
 
-  // --- TAMPILAN LOADING / ERROR ---
+  // --- TAMPILAN ---
   if (loading)
     return (
-      <div className="min-h-screen flex items-center justify-center animate-pulse text-slate-500">
-        Sedang mengambil data...
+      <div className="min-h-screen flex items-center justify-center text-pink-400 font-bold animate-pulse">
+        Sedang memuat cantik... 🌸
       </div>
     )
   if (!product)
     return (
-      <div className="min-h-screen flex items-center justify-center text-slate-500">
-        Produk tidak ditemukan.
+      <div className="min-h-screen flex items-center justify-center text-gray-400">
+        Produk tidak ditemukan :(
       </div>
     )
 
-  // --- TAMPILAN UTAMA ---
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-800 relative">
-      {/* Navbar */}
-      <nav className="p-4 bg-white shadow-sm sticky top-0 z-10">
-        <button
-          onClick={() => navigate('/')}
-          className="text-slate-600 font-bold hover:text-blue-600 flex items-center gap-2"
-        >
-          ← Kembali
-        </button>
+    <div className="min-h-screen bg-pink-50 font-sans text-gray-800">
+      {/* NAVBAR SIMPEL */}
+      <nav className="p-4 bg-white/80 backdrop-blur-md sticky top-0 z-10 border-b border-pink-100">
+        <div className="max-w-4xl mx-auto">
+          <button
+            onClick={() => navigate('/')}
+            className="text-pink-500 font-bold hover:text-pink-700 flex items-center gap-2 transition"
+          >
+            ← Kembali Belanja
+          </button>
+        </div>
       </nav>
 
-      <div className="max-w-4xl mx-auto p-4 md:p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
-        {/* Gambar Produk */}
-        <div className="bg-white p-4 rounded-3xl shadow-sm">
-          <img
-            // Pake Helper di sini biar gak crash
-            src={getImageUrl(product.image_url)}
-            className="w-full rounded-2xl object-cover aspect-square"
-            alt={product.name}
-            onError={(e) => {
-              e.target.src = 'https://placehold.co/400?text=No+Image'
-            }}
-          />
-        </div>
+      {/* KONTEN PRODUK */}
+      <div className="max-w-4xl mx-auto p-6 md:p-8">
+        <div className="bg-white rounded-3xl shadow-xl overflow-hidden flex flex-col md:flex-row border border-pink-100">
+          {/* Gambar */}
+          <div className="w-full md:w-1/2 bg-gray-50">
+            <img
+              src={getImageUrl(product.image_url)}
+              alt={product.name}
+              className="w-full h-full object-cover aspect-square md:aspect-auto"
+              onError={(e) => {
+                e.target.src = 'https://placehold.co/400?text=No+Image'
+              }}
+            />
+          </div>
 
-        {/* Detail Produk */}
-        <div className="space-y-6">
-          <div>
-            <span className="bg-blue-100 text-blue-600 px-3 py-1 rounded-full text-xs font-bold uppercase">
+          {/* Detail */}
+          <div className="w-full md:w-1/2 p-8 flex flex-col justify-center">
+            <span className="bg-pink-100 text-pink-600 px-3 py-1 rounded-full text-xs font-bold w-fit mb-4 uppercase tracking-wider">
               {product.category}
             </span>
-            <h1 className="text-3xl md:text-4xl font-black mt-2 text-slate-900">
+            <h1 className="text-3xl font-extrabold text-gray-900 mb-2 leading-tight">
               {product.name}
             </h1>
-            <p className="text-3xl font-bold text-emerald-600 mt-2">
+            <p className="text-2xl font-black text-pink-500 mb-6">
               {formatRupiah(product.price)}
             </p>
-          </div>
 
-          <div className="prose text-slate-500 text-sm">
-            <p>{product.description || 'Tidak ada deskripsi.'}</p>
-          </div>
+            <p className="text-gray-500 leading-relaxed mb-8 text-sm">
+              {product.description ||
+                'Deskripsi produk belum tersedia, tapi dijamin bagus kok! ✨'}
+            </p>
 
-          {/* Tombol Utama */}
-          <div className="pt-4 border-t">
-            <div className="flex justify-between items-center mb-4">
-              <span className="font-bold text-slate-500">
-                Stok: {product.stock}
-              </span>
+            <div className="mt-auto pt-6 border-t border-gray-100">
+              <div className="flex justify-between items-center mb-4 text-sm font-bold text-gray-400">
+                <span>Stok Tersedia</span>
+                <span
+                  className={
+                    product.stock > 0 ? 'text-green-500' : 'text-red-500'
+                  }
+                >
+                  {product.stock} pcs
+                </span>
+              </div>
+              <button
+                onClick={() => product.stock > 0 && setShowModal(true)}
+                disabled={product.stock <= 0}
+                className={`w-full py-4 rounded-xl font-bold text-white shadow-lg transition transform hover:scale-[1.02] ${
+                  product.stock > 0
+                    ? 'bg-gradient-to-r from-pink-500 to-purple-600 hover:shadow-pink-300'
+                    : 'bg-gray-300 cursor-not-allowed'
+                }`}
+              >
+                {product.stock > 0 ? 'Beli Sekarang ✨' : 'Stok Habis 😭'}
+              </button>
             </div>
-
-            <button
-              onClick={() => {
-                if (product.stock > 0) setShowModal(true)
-              }}
-              disabled={product.stock <= 0}
-              className={`w-full py-4 rounded-xl font-bold text-lg shadow-lg transition-transform active:scale-95 ${
-                product.stock > 0
-                  ? 'bg-slate-900 text-white hover:bg-blue-600'
-                  : 'bg-slate-300 text-slate-500 cursor-not-allowed'
-              }`}
-            >
-              {product.stock > 0 ? 'Beli Sekarang' : 'Stok Habis'}
-            </button>
           </div>
         </div>
       </div>
 
-      {/* --- MODAL PILIH PEMBAYARAN --- */}
+      {/* --- MODAL PEMBAYARAN --- */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-end md:items-center justify-center p-4 backdrop-blur-sm transition-all">
-          <div className="bg-white w-full max-w-md rounded-t-3xl md:rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-10 fade-in duration-300">
-            {/* Header Modal */}
-            <div className="flex justify-between items-center mb-6 border-b pb-4">
-              <h3 className="text-xl font-black text-slate-800">
-                Pilih Pembayaran
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-4 sm:p-6">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
+            onClick={() => setShowModal(false)}
+          />
+
+          <div className="relative bg-white w-full max-w-md rounded-t-3xl md:rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-10 duration-300">
+            <div className="flex justify-between items-center mb-6 border-b border-gray-100 pb-4">
+              <h3 className="text-xl font-bold text-gray-800">
+                Metode Pembayaran
               </h3>
               <button
                 onClick={() => setShowModal(false)}
-                className="text-slate-400 hover:text-red-500 font-bold text-xl"
+                className="text-gray-400 hover:text-red-500 text-2xl"
               >
-                ✕
+                &times;
               </button>
             </div>
 
-            {/* Pilihan Metode */}
-            <div className="space-y-4 mb-8">
-              {/* Opsi 1: COD */}
+            <div className="space-y-3 mb-8">
+              {/* Pilihan COD */}
               <div
                 onClick={() => {
                   setPaymentMethod('cod')
@@ -236,63 +229,50 @@ Mohon diproses ya min! Terima kasih.
                 }}
                 className={`p-4 rounded-xl border-2 cursor-pointer flex items-center gap-4 transition-all ${
                   paymentMethod === 'cod'
-                    ? 'border-blue-600 bg-blue-50'
-                    : 'border-slate-100 hover:border-blue-200'
+                    ? 'border-pink-500 bg-pink-50'
+                    : 'border-gray-100 hover:border-pink-200'
                 }`}
               >
                 <div
-                  className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                    paymentMethod === 'cod'
-                      ? 'border-blue-600'
-                      : 'border-slate-300'
-                  }`}
+                  className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${paymentMethod === 'cod' ? 'border-pink-500' : 'border-gray-300'}`}
                 >
                   {paymentMethod === 'cod' && (
-                    <div className="w-2.5 h-2.5 bg-blue-600 rounded-full"></div>
+                    <div className="w-2.5 h-2.5 bg-pink-500 rounded-full" />
                   )}
                 </div>
                 <div>
-                  <p className="font-bold text-slate-800">
+                  <p className="font-bold text-gray-800">
                     COD (Bayar di Tempat)
                   </p>
-                  <p className="text-xs text-slate-500">
-                    Bayar tunai saat kurir datang
-                  </p>
+                  <p className="text-xs text-gray-500">Bayar tunai ke kurir</p>
                 </div>
               </div>
 
-              {/* Opsi 2: Transfer Bank */}
+              {/* Pilihan Transfer */}
               <div
                 onClick={() => setPaymentMethod('transfer')}
                 className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
                   paymentMethod === 'transfer'
-                    ? 'border-blue-600 bg-blue-50'
-                    : 'border-slate-100 hover:border-blue-200'
+                    ? 'border-pink-500 bg-pink-50'
+                    : 'border-gray-100 hover:border-pink-200'
                 }`}
               >
                 <div className="flex items-center gap-4 mb-2">
                   <div
-                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                      paymentMethod === 'transfer'
-                        ? 'border-blue-600'
-                        : 'border-slate-300'
-                    }`}
+                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${paymentMethod === 'transfer' ? 'border-pink-500' : 'border-gray-300'}`}
                   >
                     {paymentMethod === 'transfer' && (
-                      <div className="w-2.5 h-2.5 bg-blue-600 rounded-full"></div>
+                      <div className="w-2.5 h-2.5 bg-pink-500 rounded-full" />
                     )}
                   </div>
                   <div>
-                    <p className="font-bold text-slate-800">Transfer Bank</p>
-                    <p className="text-xs text-slate-500">
-                      Verifikasi otomatis
-                    </p>
+                    <p className="font-bold text-gray-800">Transfer Bank</p>
+                    <p className="text-xs text-gray-500">Verifikasi otomatis</p>
                   </div>
                 </div>
 
-                {/* Dropdown Bank */}
                 {paymentMethod === 'transfer' && (
-                  <div className="mt-4 ml-9 grid grid-cols-2 gap-2 animate-in fade-in zoom-in duration-200">
+                  <div className="mt-3 ml-9 grid grid-cols-2 gap-2 animate-in fade-in zoom-in duration-200">
                     {['BCA', 'BRI', 'Mandiri', 'BNI'].map((bank) => (
                       <button
                         key={bank}
@@ -300,10 +280,10 @@ Mohon diproses ya min! Terima kasih.
                           e.stopPropagation()
                           setSelectedBank(bank)
                         }}
-                        className={`py-2 px-3 rounded-lg text-sm font-bold border ${
+                        className={`py-2 px-3 rounded-lg text-xs font-bold border transition ${
                           selectedBank === bank
-                            ? 'bg-blue-600 text-white border-blue-600'
-                            : 'bg-white text-slate-600 border-slate-200 hover:border-blue-400'
+                            ? 'bg-pink-500 text-white border-pink-500'
+                            : 'bg-white text-gray-600 border-gray-200 hover:border-pink-400'
                         }`}
                       >
                         {bank}
@@ -314,20 +294,19 @@ Mohon diproses ya min! Terima kasih.
               </div>
             </div>
 
-            {/* Tombol Aksi Modal */}
-            <div className="space-y-3">
-              <div className="flex justify-between text-sm font-bold text-slate-600 mb-2">
-                <span>Total Bayar:</span>
-                <span className="text-slate-900 text-lg">
+            <div className="pt-4 border-t border-gray-100">
+              <div className="flex justify-between text-sm font-bold text-gray-500 mb-4">
+                <span>Total Tagihan</span>
+                <span className="text-pink-600 text-lg">
                   {formatRupiah(product.price)}
                 </span>
               </div>
               <button
                 onClick={handleProcessOrder}
                 disabled={isSubmitting}
-                className="w-full bg-slate-900 text-white py-4 rounded-xl font-bold hover:bg-blue-600 transition-colors shadow-lg disabled:bg-slate-300"
+                className="w-full bg-pink-600 text-white py-3 rounded-xl font-bold hover:bg-pink-700 transition shadow-lg shadow-pink-200 disabled:bg-gray-300 disabled:text-gray-500"
               >
-                {isSubmitting ? 'Memproses...' : 'Bayar Sekarang'}
+                {isSubmitting ? 'Memproses...' : 'Konfirmasi Pembayaran'}
               </button>
             </div>
           </div>
