@@ -4,40 +4,69 @@ import { useNavigate } from 'react-router-dom'
 
 function Home() {
   const navigate = useNavigate()
+  
+  // --- STATE DATA ---
   const [products, setProducts] = useState([])
   const [cart, setCart] = useState([])
+  const [user, setUser] = useState(null) // State buat nyimpen data user login
+  
+  // --- STATE UI ---
   const [showCart, setShowCart] = useState(false)
   const [paymentMethod, setPaymentMethod] = useState('COD')
+  const [loading, setLoading] = useState(true)
 
-  // STATE SEARCH & FILTER
+  // --- STATE FILTER ---
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('Semua')
 
   const categories = ['Semua', 'Skincare', 'Makeup', 'Parfum', 'Lainnya']
 
+  // 1. CEK LOGIN & AMBIL PRODUK
   useEffect(() => {
+    // Cek apakah user sudah login?
+    const storedUser = localStorage.getItem("customer_user")
+    if (storedUser) {
+      setUser(JSON.parse(storedUser))
+    }
     fetchProducts()
   }, [])
 
   const fetchProducts = async () => {
     try {
-      const res = await axios.get(
-        'https://changing-carmita-afcodestudio-212bd12d.koyeb.app/products'
-      )
+      // Pake Environment Variable biar aman
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/products`)
       setProducts(res.data || [])
     } catch (err) {
       console.error('Gagal ambil produk', err)
+    } finally {
+      setLoading(false)
     }
   }
 
-  // --- LOGIKA FILTERING ---
+  // 2. HELPER URL GAMBAR (Biar gak crash mixed content)
+  const getImageUrl = (url) => {
+    if (!url || url === '') return 'https://placehold.co/150?text=No+Image'
+    let cleanUrl = url.replace('http://localhost:8081/', '').replace('http://localhost:8080/', '')
+    if (cleanUrl.startsWith('http')) return cleanUrl
+    return `${import.meta.env.VITE_API_URL}/${cleanUrl}`
+  }
+
+  // 3. LOGIKA FILTER
   const filteredProducts = products.filter(
     (p) =>
       p.name.toLowerCase().includes(search.toLowerCase()) &&
       (categoryFilter === 'Semua' || p.category === categoryFilter)
   )
 
+  // 4. LOGIKA ADD TO CART (DENGAN PROTEKSI LOGIN)
   const addToCart = (product) => {
+    // CEK: Kalau belum login, tendang ke halaman login
+    if (!user) {
+      alert("Eits, Login dulu dong cantik biar bisa belanja! 😉")
+      navigate('/login-member')
+      return
+    }
+
     const existing = cart.find((item) => item.id === product.id)
     if (existing) {
       setCart(
@@ -48,6 +77,8 @@ function Home() {
     } else {
       setCart([...cart, { ...product, qty: 1 }])
     }
+    // Buka sidebar otomatis biar user tau barang masuk
+    setShowCart(true) 
   }
 
   const removeFromCart = (id) => {
@@ -56,7 +87,14 @@ function Home() {
 
   const totalPrice = cart.reduce((acc, curr) => acc + curr.price * curr.qty, 0)
 
+  // 5. LOGIKA CHECKOUT
   const handleCheckout = async () => {
+    if (!user) {
+       alert("Sesi habis, silakan login ulang.")
+       navigate('/login-member')
+       return
+    }
+
     const anyOutOfStock = cart.some((item) => {
       const p = products.find((prod) => prod.id === item.id)
       return !p || p.stock <= 0
@@ -69,9 +107,10 @@ function Home() {
 
     try {
       await axios.post(
-        'https://changing-carmita-afcodestudio-212bd12d.koyeb.app/checkout',
+        `${import.meta.env.VITE_API_URL}/checkout`,
         {
-          customer_name: 'Alfi Febriawan', // Nanti bisa diganti dinamis kalau ada login customer
+          customer_name: user.full_name, // PAKE NAMA ASLI USER
+          customer_id: user.id, // (Opsional: Nanti backend butuh ID ini)
           payment_method: paymentMethod,
           cart_items: cart.map((item) => ({
             product_id: item.id,
@@ -81,13 +120,22 @@ function Home() {
           total_price: totalPrice,
         }
       )
-      alert(`Berhasil! Pesanan diproses dengan metode ${paymentMethod}`)
+      alert(`Berhasil! Pesanan Kak ${user.full_name} sedang diproses.`)
       setCart([])
       setShowCart(false)
-      fetchProducts()
+      fetchProducts() // Refresh stok
     } catch (err) {
-      alert('Checkout Gagal')
+      console.error(err)
+      alert('Checkout Gagal. Cek koneksi internet.')
     }
+  }
+
+  // 6. LOGIKA LOGOUT
+  const handleLogout = () => {
+    localStorage.removeItem("customer_user")
+    setUser(null)
+    setCart([]) // Kosongkan keranjang pas logout
+    window.location.reload()
   }
 
   const formatRupiah = (number) =>
@@ -97,64 +145,83 @@ function Home() {
       minimumFractionDigits: 0,
     }).format(number)
 
-  // --- HELPER BARU (PEMBERSIH LOCALHOST & SUPAYA GAK CRASH) ---
-  const getImageUrl = (url) => {
-    // 1. Kalau kosong, kasih placeholder
-    if (!url || url === '') return 'https://placehold.co/150?text=No+Image'
-
-    // 2. HAPUS 'http://localhost:8081/' atau '8080' kalau kesimpen di database
-    // Ini penting banget biar gak kena Mixed Content Error
-    let cleanUrl = url
-      .replace('http://localhost:8081/', '')
-      .replace('http://localhost:8080/', '')
-
-    // 3. Kalau link-nya dari internet beneran (misal google.com), biarin
-    if (cleanUrl.startsWith('http')) return cleanUrl
-
-    // 4. Sisanya tempel ke Koyeb
-    return `https://changing-carmita-afcodestudio-212bd12d.koyeb.app/${cleanUrl}`
-  }
-
   return (
-    <div className="min-h-screen bg-slate-50 font-sans">
-      {/* NAVBAR */}
-      <nav className="bg-white border-b px-6 py-4 flex flex-col md:flex-row gap-4 justify-between items-center sticky top-0 z-50 shadow-sm">
-        <div className="font-bold text-2xl text-blue-600 italic shrink-0">
-          Gaya Beauty
-        </div>
+    <div className="min-h-screen bg-pink-50 font-sans text-gray-800">
+      {/* === NAVBAR LUXURY === */}
+      <nav className="bg-white shadow-md sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col md:flex-row justify-between items-center h-auto md:h-20 py-4 gap-4">
+            
+            {/* Logo */}
+            <div className="flex-shrink-0 flex items-center cursor-pointer" onClick={() => navigate('/')}>
+              <span className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-purple-600 italic">
+                Gaya Beauty
+              </span>
+            </div>
 
-        {/* SEARCH BAR */}
-        <div className="flex-1 max-w-xl w-full relative">
-          <input
-            type="text"
-            placeholder="Cari produk kecantikan favoritmu..."
-            className="w-full pl-10 pr-4 py-2 bg-slate-100 border-none rounded-full outline-none focus:ring-2 focus:ring-blue-500 transition text-sm"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
+            {/* Search Bar (Modern) */}
+            <div className="flex-1 max-w-lg w-full relative">
+               <input
+                type="text"
+                placeholder="Cari skincare favoritmu..."
+                className="w-full pl-5 pr-4 py-2 bg-pink-50 border border-pink-100 rounded-full outline-none focus:ring-2 focus:ring-pink-400 transition text-sm text-pink-800 placeholder-pink-300"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
 
-        <button
-          onClick={() => setShowCart(true)}
-          className="relative bg-slate-100 p-2 rounded-full hover:bg-slate-200 transition"
-        >
-          🛒{' '}
-          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] px-1.5 rounded-full font-bold">
-            {cart.length}
-          </span>
-        </button>
+            {/* User & Cart Menu */}
+            <div className="flex items-center space-x-4">
+              {user ? (
+                // Tampilan SUDAH LOGIN
+                <div className="flex items-center gap-3">
+                  <div className="hidden md:block text-right">
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wider">Halo,</p>
+                    <p className="text-pink-600 font-bold text-sm truncate max-w-[100px]">{user.full_name}</p>
+                  </div>
+                  <button onClick={handleLogout} className="text-xs text-red-400 hover:text-red-600 border border-red-100 px-3 py-1 rounded-full">
+                    Keluar
+                  </button>
+                </div>
+              ) : (
+                // Tampilan BELUM LOGIN
+                <div className="flex gap-2">
+                   <button onClick={() => navigate('/login-member')} className="px-4 py-1.5 text-sm text-pink-600 font-bold hover:bg-pink-50 rounded-full transition">
+                    Masuk
+                  </button>
+                  <button onClick={() => navigate('/register-member')} className="px-4 py-1.5 text-sm bg-pink-500 text-white font-bold rounded-full shadow-md hover:bg-pink-600 transition">
+                    Daftar
+                  </button>
+                </div>
+              )}
+
+              {/* Tombol Keranjang */}
+              <button
+                onClick={() => setShowCart(true)}
+                className="relative p-2 bg-pink-100 rounded-full text-pink-600 hover:bg-pink-200 transition"
+              >
+                🛒
+                {cart.length > 0 && (
+                   <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full font-bold shadow-sm">
+                    {cart.length}
+                   </span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       </nav>
 
-      {/* TABS KATEGORI */}
-      <div className="max-w-7xl mx-auto px-6 py-4 flex gap-3 overflow-x-auto no-scrollbar">
+      {/* === TABS KATEGORI === */}
+      <div className="max-w-7xl mx-auto px-4 py-6 flex gap-3 overflow-x-auto no-scrollbar">
         {categories.map((cat) => (
           <button
             key={cat}
             onClick={() => setCategoryFilter(cat)}
-            className={`px-6 py-2 rounded-full text-xs font-bold whitespace-nowrap border transition shadow-sm ${
+            className={`px-5 py-2 rounded-full text-xs font-bold whitespace-nowrap border transition shadow-sm ${
               categoryFilter === cat
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-white text-slate-500 border-slate-200 hover:border-blue-300'
+                ? 'bg-pink-500 text-white border-pink-500 shadow-pink-200'
+                : 'bg-white text-gray-500 border-gray-100 hover:border-pink-300 hover:text-pink-500'
             }`}
           >
             {cat}
@@ -162,160 +229,126 @@ function Home() {
         ))}
       </div>
 
-      {/* GRID PRODUK */}
-      <main className="max-w-7xl mx-auto p-6 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
-        {filteredProducts.length === 0 ? (
-          <div className="col-span-full text-center py-20 text-slate-400 italic">
+      {/* === HERO BANNER (Opsional) === */}
+      {categoryFilter === 'Semua' && !search && (
+          <div className="max-w-7xl mx-auto px-4 mb-8">
+            <div className="bg-gradient-to-r from-pink-400 to-purple-500 rounded-2xl p-8 text-white text-center shadow-lg">
+                <h1 className="text-2xl md:text-4xl font-bold mb-2">Diskon Spesial Member Baru!</h1>
+                <p className="text-pink-100">Daftar sekarang dan dapatkan promo menarik.</p>
+            </div>
+          </div>
+      )}
+
+      {/* === GRID PRODUK === */}
+      <main className="max-w-7xl mx-auto px-4 pb-20">
+        {loading ? (
+           <div className="flex justify-center py-20"><div className="animate-spin text-4xl">🌸</div></div>
+        ) : filteredProducts.length === 0 ? (
+          <div className="text-center py-20 text-gray-400 italic">
             Produk tidak ditemukan...
           </div>
         ) : (
-          filteredProducts.map((p) => (
-            <div
-              key={p.id}
-              className="group bg-white border border-slate-100 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300"
-            >
-              {/* KLIK GAMBAR UNTUK KE DETAIL */}
-              <div
-                className="cursor-pointer overflow-hidden aspect-square"
-                onClick={() => navigate(`/product/${p.id}`)}
-              >
-                <img
-                  // Pake Helper di sini biar gak crash dan gak mixed content
-                  src={getImageUrl(p.image_url)}
-                  className="w-full h-full object-cover group-hover:scale-110 transition duration-500"
-                  alt={p.name}
-                  onError={(e) => {
-                    e.target.src = 'https://placehold.co/150?text=No+Image'
-                  }}
-                />
-              </div>
-              <div className="p-4">
-                <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">
-                  {p.category}
-                </span>
-                <h3 className="font-bold text-slate-800 truncate mb-1">
-                  {p.name}
-                </h3>
-                <p className="text-blue-600 font-black text-lg mb-1">
-                  {formatRupiah(p.price)}
-                </p>
-                <p className="text-[10px] text-slate-400 mb-4 font-medium">
-                  Tersedia {p.stock} stok
-                </p>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                {filteredProducts.map((p) => (
+                    <div key={p.id} className="bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden border border-pink-50 group">
+                        {/* Gambar */}
+                        <div className="relative aspect-square overflow-hidden cursor-pointer" onClick={() => navigate(`/product/${p.id}`)}>
+                            <img
+                                src={getImageUrl(p.image_url)}
+                                alt={p.name}
+                                className="w-full h-full object-cover group-hover:scale-110 transition duration-500"
+                                onError={(e) => { e.target.src = 'https://placehold.co/150?text=No+Image' }}
+                            />
+                            {p.stock <= 0 && (
+                                <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white font-bold">STOK HABIS</div>
+                            )}
+                        </div>
 
-                <button
-                  onClick={() => addToCart(p)}
-                  className="w-full bg-slate-900 text-white py-2.5 rounded-xl text-xs font-bold hover:bg-blue-600 transition shadow-md disabled:opacity-30 disabled:grayscale"
-                  disabled={p.stock <= 0}
-                >
-                  {p.stock > 0 ? '+ Keranjang' : 'Stok Habis'}
-                </button>
-              </div>
+                        {/* Info Produk */}
+                        <div className="p-4">
+                            <span className="text-[10px] font-bold text-pink-400 uppercase tracking-widest">{p.category}</span>
+                            <h3 className="font-bold text-gray-800 truncate mb-1">{p.name}</h3>
+                            <p className="text-yellow-600 font-extrabold text-lg mb-3">
+                                {formatRupiah(p.price)}
+                            </p>
+
+                            <button
+                                onClick={() => addToCart(p)}
+                                className="w-full bg-white border-2 border-pink-500 text-pink-600 py-2 rounded-xl text-xs font-bold hover:bg-pink-500 hover:text-white transition-all shadow-sm disabled:opacity-50 disabled:border-gray-300 disabled:text-gray-400"
+                                disabled={p.stock <= 0}
+                            >
+                                {p.stock > 0 ? '+ Keranjang' : 'Habis'}
+                            </button>
+                        </div>
+                    </div>
+                ))}
             </div>
-          ))
         )}
       </main>
 
-      {/* SIDEBAR KERANJANG */}
+      {/* === SIDEBAR KERANJANG (PINK EDITION) === */}
       {showCart && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex justify-end backdrop-blur-sm">
-          <div className="bg-white w-full sm:w-[450px] h-full flex flex-col animate-in slide-in-from-right duration-300">
-            <div className="p-6 border-b flex justify-between items-center bg-white">
-              <h2 className="text-xl font-bold text-slate-900">
-                Keranjang Belanja
-              </h2>
-              <button
-                onClick={() => setShowCart(false)}
-                className="text-3xl text-slate-300 hover:text-red-500 transition"
-              >
-                &times;
-              </button>
+          <div className="bg-white w-full sm:w-[400px] h-full flex flex-col animate-in slide-in-from-right duration-300 shadow-2xl">
+            {/* Header Sidebar */}
+            <div className="p-5 border-b border-pink-100 flex justify-between items-center bg-pink-50">
+              <h2 className="text-lg font-bold text-pink-700">Keranjang Belanja</h2>
+              <button onClick={() => setShowCart(false)} className="text-2xl text-pink-300 hover:text-pink-600 transition">&times;</button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/30">
+            {/* List Barang */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
               {cart.length === 0 ? (
-                <div className="text-center py-20 text-slate-400 italic text-sm">
-                  Keranjangmu masih kosong nih...
-                </div>
+                <div className="text-center py-20 text-gray-400 italic text-sm">Masih kosong nih...</div>
               ) : (
                 cart.map((item) => {
-                  const liveProduct = products.find((p) => p.id === item.id)
-                  const isOutOfStock = !liveProduct || liveProduct.stock <= 0
-
-                  return (
-                    <div
-                      key={item.id}
-                      className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-100 shadow-sm"
-                    >
-                      <div className={isOutOfStock ? 'opacity-50' : ''}>
-                        <p
-                          className={`font-bold text-sm ${
-                            isOutOfStock
-                              ? 'line-through italic text-red-500'
-                              : 'text-slate-800'
-                          }`}
-                        >
-                          {item.name} {isOutOfStock && '(Stok Habis)'}
-                        </p>
-                        <p className="text-xs text-slate-500 font-medium">
-                          {item.qty} x {formatRupiah(item.price)}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => removeFromCart(item.id)}
-                        className="text-red-500 text-xs font-bold hover:bg-red-50 px-3 py-1.5 rounded-lg transition"
-                      >
-                        Hapus
-                      </button>
-                    </div>
-                  )
+                    const liveProduct = products.find((p) => p.id === item.id)
+                    const isOutOfStock = !liveProduct || liveProduct.stock <= 0
+                    return (
+                        <div key={item.id} className="flex justify-between items-center bg-white p-3 rounded-xl border border-pink-100 shadow-sm">
+                        <div className={isOutOfStock ? 'opacity-50' : ''}>
+                            <p className={`font-bold text-sm ${isOutOfStock ? 'line-through text-red-500' : 'text-gray-800'}`}>
+                                {item.name}
+                            </p>
+                            <p className="text-xs text-pink-500 font-medium">{item.qty} x {formatRupiah(item.price)}</p>
+                        </div>
+                        <button onClick={() => removeFromCart(item.id)} className="text-red-400 text-xs hover:bg-red-50 px-2 py-1 rounded transition">Hapus</button>
+                        </div>
+                    )
                 })
               )}
             </div>
 
-            <div className="p-6 bg-white border-t space-y-6 shadow-[0_-10px_20px_rgba(0,0,0,0.02)]">
-              {/* PILIHAN PEMBAYARAN */}
-              <div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">
-                  Pilih Metode Pembayaran
-                </p>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => setPaymentMethod('COD')}
-                    className={`py-3 text-xs font-bold rounded-xl border-2 transition ${
-                      paymentMethod === 'COD'
-                        ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-100'
-                        : 'bg-white text-slate-500 border-slate-100 hover:border-blue-200'
-                    }`}
-                  >
-                    COD (Tunai)
-                  </button>
-                  <button
-                    onClick={() => setPaymentMethod('M-Banking')}
-                    className={`py-3 text-xs font-bold rounded-xl border-2 transition ${
-                      paymentMethod === 'M-Banking'
-                        ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-100'
-                        : 'bg-white text-slate-500 border-slate-100 hover:border-blue-200'
-                    }`}
-                  >
-                    M-Banking
-                  </button>
-                </div>
-              </div>
+            {/* Footer Checkout */}
+            <div className="p-6 bg-white border-t border-pink-100 shadow-[0_-10px_30px_rgba(0,0,0,0.03)]">
+               <div className="mb-4">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">Metode Pembayaran</p>
+                  <div className="flex gap-2">
+                     {['COD', 'M-Banking'].map(method => (
+                         <button 
+                            key={method}
+                            onClick={() => setPaymentMethod(method)}
+                            className={`flex-1 py-2 text-xs font-bold rounded-lg border transition ${
+                                paymentMethod === method 
+                                ? 'bg-pink-600 text-white border-pink-600' 
+                                : 'bg-white text-gray-500 border-gray-200 hover:border-pink-300'
+                            }`}
+                         >
+                            {method}
+                         </button>
+                     ))}
+                  </div>
+               </div>
 
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500 font-medium">
-                  Total Pembayaran
-                </span>
-                <span className="text-2xl font-black text-slate-900">
-                  {formatRupiah(totalPrice)}
-                </span>
+              <div className="flex justify-between items-center mb-4">
+                <span className="text-gray-600 font-medium">Total</span>
+                <span className="text-xl font-black text-pink-600">{formatRupiah(totalPrice)}</span>
               </div>
 
               <button
                 onClick={handleCheckout}
                 disabled={cart.length === 0}
-                className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-lg hover:bg-blue-600 disabled:bg-slate-200 disabled:text-slate-400 transition-all shadow-xl shadow-slate-200 active:scale-95"
+                className="w-full bg-pink-600 text-white py-3 rounded-xl font-bold hover:bg-pink-700 disabled:bg-gray-200 disabled:text-gray-400 transition shadow-lg shadow-pink-200"
               >
                 Bayar Sekarang
               </button>
