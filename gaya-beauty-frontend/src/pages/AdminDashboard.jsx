@@ -1,610 +1,195 @@
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
-import {
-  FiPlus,
-  FiTrash2,
-  FiEdit,
-  FiLogOut,
-  FiPackage,
-  FiShoppingBag,
-  FiUploadCloud,
-  FiX,
-} from 'react-icons/fi'
 
-function AdminDashboard() {
+const AdminDashboard = () => {
+  const [orders, setOrders] = useState([])
+  const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
 
-  // --- STATE UMUM ---
-  const [activeTab, setActiveTab] = useState('orders')
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-
-  // --- STATE LOGIN ---
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-
-  // --- STATE DATA ---
-  const [orders, setOrders] = useState([])
-  const [products, setProducts] = useState([])
-
-  // --- STATE MODAL ---
-  const [showModal, setShowModal] = useState(false)
-  const [isEditing, setIsEditing] = useState(false)
-  const [editId, setEditId] = useState(null)
-  const [selectedFileName, setSelectedFileName] = useState('Belum ada file dipilih')
-
-  // Form Data Produk
-  const [productForm, setProductForm] = useState({
-    name: '',
-    price: '',
-    stock: '',
-    category: 'Skincare',
-    description: '',
-    image: null,
-  })
-  const fileInputRef = useRef(null)
-
-  // 1. CEK LOGIN
   useEffect(() => {
-    const token = localStorage.getItem('token')
-    if (token) {
-      setIsLoggedIn(true)
-      fetchInitialData()
-    }
-  }, [])
-
-  // 2. FUNGSI AMBIL DATA
-  const fetchInitialData = () => {
     fetchOrders()
-    fetchProducts()
-  }
+  }, [])
 
   const fetchOrders = async () => {
     try {
-      const token = localStorage.getItem('token')
-      const res = await axios.get(
-        'https://changing-carmita-afcodestudio-212bd12d.koyeb.app/orders',
-        { headers: { Authorization: `Bearer ${token}` } }
-      )
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/orders`, {
+        headers: { Authorization: 'Bearer token_rahasia_nanti' }, // Sementara bypass dulu
+      })
       setOrders(res.data || [])
-    } catch (err) {
-      console.error('Gagal ambil order', err)
-    }
-  }
-
-  const fetchProducts = async () => {
-    try {
-      const res = await axios.get(
-        'https://changing-carmita-afcodestudio-212bd12d.koyeb.app/products'
-      )
-      setProducts(res.data || [])
-    } catch (err) {
-      console.error('Gagal ambil produk', err)
-    }
-  }
-
-  // 3. HANDLE LOGIN
-  const handleLogin = async (e) => {
-    e.preventDefault()
-    setIsLoading(true)
-    try {
-      const res = await axios.post(
-        'https://changing-carmita-afcodestudio-212bd12d.koyeb.app/login',
-        { email, password }
-      )
-      localStorage.setItem('token', res.data.token)
-      setIsLoggedIn(true)
-      fetchInitialData()
-      alert('Login Berhasil! 🔥')
-    } catch (err) {
-      alert('Email atau Password salah!')
+    } catch (error) {
+      console.error('Gagal ambil order:', error)
     } finally {
-      setIsLoading(false)
+      setLoading(false)
     }
   }
 
-  // 4. HANDLE LOGOUT
+  const handleStatusUpdate = async (orderId, newStatus) => {
+    try {
+      await axios.post(`${import.meta.env.VITE_API_URL}/orders/update`, {
+        order_id: orderId,
+        status: newStatus,
+      })
+      fetchOrders() // Refresh data
+      alert(`Status berhasil diubah jadi ${newStatus}`)
+    } catch (error) {
+      alert('Gagal update status')
+    }
+  }
+
   const handleLogout = () => {
-    localStorage.removeItem('token')
-    setIsLoggedIn(false)
-    navigate('/admin')
+    // Logic logout admin
+    navigate('/login') // Asumsi ada login admin
   }
 
-  // 5. UPDATE STATUS ORDER
-  const handleUpdateOrderStatus = async (orderID, newStatus) => {
-    try {
-      const token = localStorage.getItem('token')
-      await axios.put(
-        'https://changing-carmita-afcodestudio-212bd12d.koyeb.app/orders/update',
-        { order_id: orderID, status: newStatus },
-        { headers: { Authorization: `Bearer ${token}` } }
-      )
-      fetchOrders()
-      alert(`Status berubah jadi: ${newStatus}`)
-    } catch (err) {
-      alert('Gagal update status!')
+  // FORMAT RUPIAH
+  const formatRupiah = (num) =>
+    new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      minimumFractionDigits: 0,
+    }).format(num)
+
+  // FORMAT TANGGAL & JAM (TUNTUTAN LO)
+  const formatDate = (dateString) => {
+    const options = {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
     }
+    return new Date(dateString).toLocaleDateString('id-ID', options)
   }
 
-  // 6. HAPUS PRODUK
-  const handleDeleteProduct = async (id) => {
-    if (!window.confirm('Yakin mau hapus produk ini?')) return
-    try {
-      const token = localStorage.getItem('token')
-      await axios.delete(
-        `https://changing-carmita-afcodestudio-212bd12d.koyeb.app/products/delete?id=${id}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      )
-      fetchProducts()
-      alert('Produk berhasil dihapus!')
-    } catch (err) {
-      alert('Gagal hapus produk!')
-    }
+  // FORMAT RESI/ID MEWAH (TUNTUTAN LO)
+  // Contoh: TRX-2026-004
+  const generateResi = (id, dateString) => {
+    const year = new Date(dateString).getFullYear()
+    return `TRX-${year}-${String(id).padStart(3, '0')}`
   }
 
-  // 7. BUKA MODAL
-  const openModal = (product = null) => {
-    if (product) {
-      setIsEditing(true)
-      setEditId(product.id)
-      setProductForm({
-        name: product.name,
-        price: product.price,
-        stock: product.stock,
-        category: product.category,
-        description: product.description,
-        image: null,
-      })
-      setSelectedFileName('Gambar lama tetap dipakai (kecuali diganti)')
-    } else {
-      setIsEditing(false)
-      setEditId(null)
-      setProductForm({
-        name: '',
-        price: '',
-        stock: '',
-        category: 'Skincare',
-        description: '',
-        image: null,
-      })
-      setSelectedFileName('Belum ada file dipilih')
-    }
-    setShowModal(true)
-  }
-
-  // 8. SIMPAN PRODUK
-  const handleSaveProduct = async (e) => {
-    e.preventDefault()
-    setIsLoading(true)
-
-    const formData = new FormData()
-    formData.append('name', productForm.name)
-    formData.append('price', productForm.price)
-    formData.append('stock', productForm.stock)
-    formData.append('category', productForm.category)
-    formData.append('description', productForm.description)
-    if (productForm.image) {
-      formData.append('image', productForm.image)
-    }
-
-    try {
-      const token = localStorage.getItem('token')
-      const config = {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data',
-        },
-      }
-
-      if (isEditing) {
-        formData.append('id', editId)
-        await axios.put(
-          'https://changing-carmita-afcodestudio-212bd12d.koyeb.app/products/update',
-          formData,
-          config
-        )
-        alert('Produk Berhasil Diupdate! 🎉')
-      } else {
-        await axios.post(
-          'https://changing-carmita-afcodestudio-212bd12d.koyeb.app/products/create',
-          formData,
-          config
-        )
-        alert('Produk Baru Berhasil Ditambah! 🚀')
-      }
-
-      setShowModal(false)
-      fetchProducts()
-    } catch (err) {
-      console.error(err)
-      alert('Gagal menyimpan produk. Cek koneksi backend!')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // --- HELPER BARU (PEMBERSIH LOCALHOST & SUPAYA GAK CRASH) ---
-  const getImageUrl = (url) => {
-    // 1. Kalau kosong, kasih placeholder
-    if (!url || url === "") return 'https://placehold.co/150?text=No+Image'
-
-    // 2. HAPUS 'http://localhost:8081/' atau '8080' kalau kesimpen di database
-    // Ini penting banget biar gak kena Mixed Content Error
-    let cleanUrl = url.replace('http://localhost:8081/', '').replace('http://localhost:8080/', '')
-
-    // 3. Kalau link-nya dari internet beneran (misal google.com), biarin
-    if (cleanUrl.startsWith('http')) return cleanUrl
-
-    // 4. Sisanya tempel ke Koyeb
-    return `https://changing-carmita-afcodestudio-212bd12d.koyeb.app/${cleanUrl}`
-  }
-
-  // --- VIEW: LOGIN FORM ---
-  if (!isLoggedIn)
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
-        <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
-          <h1 className="text-3xl font-black text-center text-blue-600 mb-2">
-            Gaya Beauty
-          </h1>
-          <p className="text-center text-slate-500 font-bold mb-8">
-            Login Seller
-          </p>
-          <form onSubmit={handleLogin} className="space-y-4">
-            <input
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full p-4 bg-slate-50 rounded-xl border font-bold"
-              required
-            />
-            <input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full p-4 bg-slate-50 rounded-xl border font-bold"
-              required
-            />
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full bg-slate-900 text-white py-4 rounded-xl font-bold hover:bg-blue-600 transition"
-            >
-              {isLoading ? 'Loading...' : 'Masuk Dashboard'}
-            </button>
-          </form>
-        </div>
-      </div>
-    )
-
-  // --- VIEW: DASHBOARD UTAMA ---
   return (
-    <div className="min-h-screen bg-slate-50 font-sans">
-      {/* HEADER */}
-      <header className="bg-white border-b px-6 py-4 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <div className="bg-blue-600 text-white p-2 rounded-lg">
-              <FiPackage />
-            </div>
-            <div>
-              <h1 className="text-xl font-black text-slate-800">
-                Dashboard Admin
-              </h1>
-              <p className="text-xs text-slate-500">
-                Gaya Beauty Control Center
-              </p>
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <button
-              onClick={() => openModal(null)}
-              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition shadow-sm"
-            >
-              <FiPlus className="text-lg" /> Tambah Produk
-            </button>
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-2 bg-white border border-slate-200 text-slate-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-50 hover:text-red-600 transition"
-            >
-              <FiLogOut /> Logout
-            </button>
-          </div>
+    <div className="min-h-screen bg-pink-50 font-sans text-gray-800">
+      {/* HEADER MEWAH */}
+      <nav className="bg-white shadow-md px-8 py-4 flex justify-between items-center sticky top-0 z-50">
+        <div>
+          <h1 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-purple-600">
+            Dashboard Admin
+          </h1>
+          <p className="text-xs text-gray-400 tracking-widest uppercase">
+            Gaya Beauty Control Center
+          </p>
         </div>
-      </header>
-
-      <div className="max-w-7xl mx-auto p-6">
-        {/* TAB NAVIGASI */}
-        <div className="flex gap-6 mb-8 border-b border-slate-200">
+        <div className="flex gap-3">
           <button
-            onClick={() => setActiveTab('orders')}
-            className={`pb-4 text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'orders' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
+            onClick={() => navigate('/products/create')} // Asumsi ada page create
+            className="bg-pink-500 hover:bg-pink-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md transition"
           >
-            <FiShoppingBag /> Daftar Pesanan
+            + Tambah Produk
           </button>
           <button
-            onClick={() => setActiveTab('products')}
-            className={`pb-4 text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'products' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
+            onClick={handleLogout}
+            className="border border-pink-200 text-pink-500 px-4 py-2 rounded-lg text-sm font-bold hover:bg-pink-50"
           >
-            <FiPackage /> Kelola Produk
+            Logout
           </button>
         </div>
+      </nav>
 
-        {/* TABEL PESANAN */}
-        {activeTab === 'orders' && (
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-            <table className="w-full text-left">
-              <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-bold">
-                <tr>
-                  <th className="px-6 py-4">ID</th>
-                  <th className="px-6 py-4">Customer</th>
-                  <th className="px-6 py-4">Total</th>
-                  <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4 text-center">Dikirim</th>
+      <main className="max-w-7xl mx-auto p-8">
+        <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-pink-100">
+          <div className="p-6 border-b border-pink-50 flex justify-between items-center">
+            <h2 className="text-lg font-bold text-gray-700">
+              Daftar Pesanan Masuk
+            </h2>
+            <span className="bg-pink-100 text-pink-600 py-1 px-3 rounded-full text-xs font-bold">
+              {orders.length} Pesanan
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-pink-50 text-pink-700 text-sm uppercase tracking-wider">
+                  <th className="p-4 font-bold">Kode Resi / ID</th>
+                  <th className="p-4 font-bold">Waktu Order</th>
+                  <th className="p-4 font-bold">Customer</th>
+                  <th className="p-4 font-bold">Total</th>
+                  <th className="p-4 font-bold">Status</th>
+                  <th className="p-4 font-bold text-center">Aksi Admin</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-50">
+              <tbody className="divide-y divide-pink-50">
                 {orders.map((order) => (
-                  <tr key={order.id} className="hover:bg-slate-50">
-                    <td className="px-6 py-4 text-xs font-mono text-slate-400">
-                      #{order.id}
+                  <tr key={order.id} className="hover:bg-pink-50/30 transition">
+                    <td className="p-4 font-mono text-sm font-bold text-gray-600">
+                      {generateResi(order.id, order.created_at)}
                     </td>
-                    <td className="px-6 py-4 font-bold text-slate-700">
-                      {order.customer_name}
+                    <td className="p-4 text-sm text-gray-500">
+                      {formatDate(order.created_at)}
                     </td>
-                    <td className="px-6 py-4 font-bold text-emerald-600">
-                      Rp {order.total_price.toLocaleString('id-ID')}
+                    <td className="p-4 font-bold text-gray-800 capitalize">
+                      {order.customer_name || 'Guest'}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="p-4 text-pink-600 font-bold">
+                      {formatRupiah(order.total_price)}
+                    </td>
+                    <td className="p-4">
                       <span
-                        className={`px-3 py-1 rounded-full text-xs font-bold ${
-                          order.status === 'Lunas'
-                            ? 'bg-green-100 text-green-700'
+                        className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                          order.status === 'Pending'
+                            ? 'bg-yellow-100 text-yellow-600 border-yellow-200'
                             : order.status === 'Dikirim'
-                              ? 'bg-blue-100 text-blue-700'
-                              : 'bg-yellow-100 text-yellow-700'
+                              ? 'bg-blue-100 text-blue-600 border-blue-200'
+                              : order.status === 'Selesai'
+                                ? 'bg-green-100 text-green-600 border-green-200'
+                                : 'bg-gray-100 text-gray-500'
                         }`}
                       >
                         {order.status}
                       </span>
                     </td>
-                    <td className="px-6 py-4 flex justify-center gap-2">
+                    <td className="p-4 flex gap-2 justify-center">
                       {order.status === 'Pending' && (
                         <button
-                          onClick={() => handleUpdateOrderStatus(order.id, 'Lunas')}
-                          className="bg-emerald-500 text-white px-3 py-1 rounded text-xs font-bold hover:bg-emerald-600"
+                          onClick={() =>
+                            handleStatusUpdate(order.id, 'Dikirim')
+                          }
+                          className="bg-blue-500 text-white px-3 py-1 rounded text-xs font-bold hover:bg-blue-600 shadow-sm"
                         >
-                          ✅ Terima
+                          🚚 Kirim Barang
                         </button>
                       )}
-                      {order.status === 'Lunas' && (
-                        <button
-                          onClick={() => handleUpdateOrderStatus(order.id, 'Dikirim')}
-                          className="bg-blue-500 text-white px-3 py-1 rounded text-xs font-bold hover:bg-blue-600"
-                        >
-                          🚚 Kirim
-                        </button>
+                      {order.status === 'Dikirim' && (
+                        <span className="text-xs text-gray-400 italic">
+                          Menunggu Customer Terima...
+                        </span>
+                      )}
+                      {order.status === 'Selesai' && (
+                        <span className="text-xs text-green-600 font-bold">
+                          ✅ Transaksi Beres
+                        </span>
                       )}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            {orders.length === 0 && (
-              <div className="p-8 text-center text-slate-400">
-                Belum ada pesanan.
-              </div>
-            )}
           </div>
-        )}
 
-        {/* TABEL PRODUK */}
-        {activeTab === 'products' && (
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-            <table className="w-full text-left">
-              <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-bold">
-                <tr>
-                  <th className="px-6 py-4">Foto</th>
-                  <th className="px-6 py-4">Nama Produk</th>
-                  <th className="px-6 py-4">Harga</th>
-                  <th className="px-6 py-4">Stok</th>
-                  <th className="px-6 py-4 text-center">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {products.map((product) => (
-                  <tr key={product.id} className="hover:bg-slate-50">
-                    <td className="px-6 py-4">
-                      <img
-                        src={getImageUrl(product.image_url)}
-                        alt={product.name}
-                        className="w-10 h-10 rounded-lg object-cover bg-slate-200 border border-slate-300"
-                        onError={(e) => {
-                          e.target.src = 'https://placehold.co/150?text=No+Image' // Pake placeholder.co biar stabil
-                        }}
-                      />
-                    </td>
-                    <td className="px-6 py-4 font-bold text-slate-700">
-                      {product.name}
-                    </td>
-                    <td className="px-6 py-4 text-emerald-600 font-bold">
-                      Rp {product.price.toLocaleString('id-ID')}
-                    </td>
-                    <td className="px-6 py-4 text-sm">{product.stock} pcs</td>
-                    <td className="px-6 py-4 flex justify-center gap-2">
-                      <button
-                        onClick={() => openModal(product)}
-                        className="p-2 text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition"
-                      >
-                        <FiEdit />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteProduct(product.id)}
-                        className="p-2 text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition"
-                      >
-                        <FiTrash2 />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* MODAL FORM */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden">
-            <div className="px-6 py-4 border-b flex justify-between items-center bg-slate-50">
-              <h3 className="font-bold text-lg text-slate-800">
-                {isEditing ? 'Edit Produk' : 'Tambah Produk Baru'}
-              </h3>
-              <button onClick={() => setShowModal(false)}>
-                <FiX className="text-slate-400 hover:text-red-500 text-xl" />
-              </button>
+          {loading && (
+            <div className="p-10 text-center text-gray-400">
+              Loading data...
             </div>
-
-            <form onSubmit={handleSaveProduct} className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase">
-                    Nama Produk
-                  </label>
-                  <input
-                    type="text"
-                    value={productForm.name}
-                    onChange={(e) =>
-                      setProductForm({ ...productForm, name: e.target.value })
-                    }
-                    className="w-full mt-1 p-3 border rounded-xl text-sm font-bold"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase">
-                    Harga (Rp)
-                  </label>
-                  <input
-                    type="number"
-                    value={productForm.price}
-                    onChange={(e) =>
-                      setProductForm({ ...productForm, price: e.target.value })
-                    }
-                    className="w-full mt-1 p-3 border rounded-xl text-sm font-bold"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase">
-                    Stok
-                  </label>
-                  <input
-                    type="number"
-                    value={productForm.stock}
-                    onChange={(e) =>
-                      setProductForm({ ...productForm, stock: e.target.value })
-                    }
-                    className="w-full mt-1 p-3 border rounded-xl text-sm font-bold"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase">
-                    Kategori
-                  </label>
-                  <select
-                    value={productForm.category}
-                    onChange={(e) =>
-                      setProductForm({
-                        ...productForm,
-                        category: e.target.value,
-                      })
-                    }
-                    className="w-full mt-1 p-3 border rounded-xl text-sm font-bold bg-white"
-                  >
-                    <option>Skincare</option>
-                    <option>Makeup</option>
-                    <option>Parfum</option>
-                    <option>Lainnya</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase">
-                  Deskripsi
-                </label>
-                <textarea
-                  rows="3"
-                  value={productForm.description}
-                  onChange={(e) =>
-                    setProductForm({
-                      ...productForm,
-                      description: e.target.value,
-                    })
-                  }
-                  className="w-full mt-1 p-3 border rounded-xl text-sm font-bold"
-                  placeholder="Jelaskan produkmu..."
-                ></textarea>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">
-                  Foto Produk
-                </label>
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={(e) => {
-                    if (e.target.files[0]) {
-                      setProductForm({
-                        ...productForm,
-                        image: e.target.files[0],
-                      })
-                      setSelectedFileName(e.target.files[0].name)
-                    }
-                  }}
-                  className="hidden"
-                  accept="image/*"
-                />
-
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current.click()}
-                    className="flex items-center gap-2 bg-slate-100 text-slate-600 px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-200 border"
-                  >
-                    <FiUploadCloud className="text-lg" /> Pilih File
-                  </button>
-                  <span className="text-xs text-slate-400 italic truncate max-w-[200px]">
-                    {selectedFileName}
-                  </span>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full bg-slate-900 text-white py-4 rounded-xl font-bold hover:bg-blue-600 transition shadow-lg mt-4"
-              >
-                {isLoading
-                  ? 'Menyimpan...'
-                  : isEditing
-                    ? 'Simpan Perubahan'
-                    : 'Tambah Produk Sekarang'}
-              </button>
-            </form>
-          </div>
+          )}
+          {!loading && orders.length === 0 && (
+            <div className="p-10 text-center text-gray-400 italic">
+              Belum ada pesanan masuk, Bos.
+            </div>
+          )}
         </div>
-      )}
+      </main>
     </div>
   )
 }

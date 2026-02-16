@@ -1,38 +1,28 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
-
-// Import Halaman Lama
+import { Routes, Route } from 'react-router-dom'
 import Home from './pages/Home'
+import Login from './pages/Login'
+import Register from './pages/Register'
 import AdminDashboard from './pages/AdminDashboard'
-import ProductDetail from './pages/ProductDetail'
-import SignUp from './pages/SignUp' // Asumsi ini buat Admin/Umum
-
-// --- IMPORT BARU (SYARAT 2: CUSTOMER) ---
-import CustomerRegister from './pages/CustomerRegister'
-import CustomerLogin from './pages/CustomerLogin'
+import LoginMember from './pages/LoginMember'
+import RegisterMember from './pages/RegisterMember'
+import MyOrders from './pages/MyOrders' // <--- INI WAJIB ADA!
 
 function App() {
   return (
-    <Router>
-      <Routes>
-        {/* Halaman Depan untuk Customer (Katalog Produk) */}
-        <Route path="/" element={<Home />} />
+    <Routes>
+      {/* JALUR UMUM */}
+      <Route path="/" element={<Home />} />
+      <Route path="/login-member" element={<LoginMember />} />
+      <Route path="/register-member" element={<RegisterMember />} />
 
-        {/* Halaman Detail Produk */}
-        <Route path="/product/:id" element={<ProductDetail />} />
+      {/* JALUR CUSTOMER (BARU) */}
+      <Route path="/my-orders" element={<MyOrders />} />
 
-        {/* Halaman Markas untuk Admin (Lo) */}
-        <Route path="/admin" element={<AdminDashboard />} />
-
-        {/* Halaman Signup Admin/Lama */}
-        <Route path="/signup" element={<SignUp />} />
-
-        {/* ========================================= */}
-        {/* 🚀 JALUR BARU: KHUSUS MEMBER / PEMBELI 🚀 */}
-        {/* ========================================= */}
-        <Route path="/register-member" element={<CustomerRegister />} />
-        <Route path="/login-member" element={<CustomerLogin />} />
-      </Routes>
-    </Router>
+      {/* JALUR ADMIN */}
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+      <Route path="/admin" element={<AdminDashboard />} />
+    </Routes>
   )
 }
 

@@ -3,13 +3,12 @@ import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
 
 function Home() {
-  // Update baru nih bos
   const navigate = useNavigate()
 
   // --- STATE DATA ---
   const [products, setProducts] = useState([])
   const [cart, setCart] = useState([])
-  const [user, setUser] = useState(null) // State buat nyimpen data user login
+  const [user, setUser] = useState(null)
 
   // --- STATE UI ---
   const [showCart, setShowCart] = useState(false)
@@ -24,7 +23,6 @@ function Home() {
 
   // 1. CEK LOGIN & AMBIL PRODUK
   useEffect(() => {
-    // Cek apakah user sudah login?
     const storedUser = localStorage.getItem('customer_user')
     if (storedUser) {
       setUser(JSON.parse(storedUser))
@@ -34,7 +32,6 @@ function Home() {
 
   const fetchProducts = async () => {
     try {
-      // Pake Environment Variable biar aman
       const res = await axios.get(`${import.meta.env.VITE_API_URL}/products`)
       setProducts(res.data || [])
     } catch (err) {
@@ -44,7 +41,7 @@ function Home() {
     }
   }
 
-  // 2. HELPER URL GAMBAR (Biar gak crash mixed content)
+  // 2. HELPER URL GAMBAR
   const getImageUrl = (url) => {
     if (!url || url === '') return 'https://placehold.co/150?text=No+Image'
     let cleanUrl = url
@@ -61,9 +58,8 @@ function Home() {
       (categoryFilter === 'Semua' || p.category === categoryFilter)
   )
 
-  // 4. LOGIKA ADD TO CART (DENGAN PROTEKSI LOGIN)
+  // 4. LOGIKA ADD TO CART
   const addToCart = (product) => {
-    // CEK: Kalau belum login, tendang ke halaman login
     if (!user) {
       alert('Eits, Login dulu dong cantik biar bisa belanja! 😉')
       navigate('/login-member')
@@ -80,7 +76,6 @@ function Home() {
     } else {
       setCart([...cart, { ...product, qty: 1 }])
     }
-    // Buka sidebar otomatis biar user tau barang masuk
     setShowCart(true)
   }
 
@@ -110,8 +105,8 @@ function Home() {
 
     try {
       await axios.post(`${import.meta.env.VITE_API_URL}/checkout`, {
-        customer_name: user.full_name, // PAKE NAMA ASLI USER
-        customer_id: user.id, // (Opsional: Nanti backend butuh ID ini)
+        customer_name: user.full_name,
+        customer_id: user.id,
         payment_method: paymentMethod,
         cart_items: cart.map((item) => ({
           product_id: item.id,
@@ -123,7 +118,7 @@ function Home() {
       alert(`Berhasil! Pesanan Kak ${user.full_name} sedang diproses.`)
       setCart([])
       setShowCart(false)
-      fetchProducts() // Refresh stok
+      fetchProducts()
     } catch (err) {
       console.error(err)
       alert('Checkout Gagal. Cek koneksi internet.')
@@ -134,7 +129,7 @@ function Home() {
   const handleLogout = () => {
     localStorage.removeItem('customer_user')
     setUser(null)
-    setCart([]) // Kosongkan keranjang pas logout
+    setCart([])
     window.location.reload()
   }
 
@@ -161,7 +156,7 @@ function Home() {
               </span>
             </div>
 
-            {/* Search Bar (Modern) */}
+            {/* Search Bar */}
             <div className="flex-1 max-w-lg w-full relative">
               <input
                 type="text"
@@ -175,8 +170,17 @@ function Home() {
             {/* User & Cart Menu */}
             <div className="flex items-center space-x-4">
               {user ? (
-                // Tampilan SUDAH LOGIN
+                // === TAMPILAN SUDAH LOGIN ===
                 <div className="flex items-center gap-3">
+                  {/* TOMBOL BARU: PESANAN SAYA (Link ke halaman tracking) */}
+                  <button
+                    onClick={() => navigate('/my-orders')}
+                    className="bg-white border border-pink-200 text-pink-500 px-3 py-1.5 rounded-full text-xs font-bold hover:bg-pink-50 transition shadow-sm flex items-center gap-1"
+                  >
+                    📦 Pesanan Saya
+                  </button>
+                  {/* ================================================= */}
+
                   <div className="hidden md:block text-right">
                     <p className="text-[10px] text-gray-500 uppercase tracking-wider">
                       Halo,
@@ -193,7 +197,7 @@ function Home() {
                   </button>
                 </div>
               ) : (
-                // Tampilan BELUM LOGIN
+                // === TAMPILAN BELUM LOGIN ===
                 <div className="flex gap-2">
                   <button
                     onClick={() => navigate('/login-member')}
@@ -244,7 +248,7 @@ function Home() {
         ))}
       </div>
 
-      {/* === HERO BANNER (Opsional) === */}
+      {/* === HERO BANNER === */}
       {categoryFilter === 'Semua' && !search && (
         <div className="max-w-7xl mx-auto px-4 mb-8">
           <div className="bg-gradient-to-r from-pink-400 to-purple-500 rounded-2xl p-8 text-white text-center shadow-lg">
@@ -321,11 +325,10 @@ function Home() {
         )}
       </main>
 
-      {/* === SIDEBAR KERANJANG (PINK EDITION) === */}
+      {/* === SIDEBAR KERANJANG === */}
       {showCart && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex justify-end backdrop-blur-sm">
           <div className="bg-white w-full sm:w-[400px] h-full flex flex-col animate-in slide-in-from-right duration-300 shadow-2xl">
-            {/* Header Sidebar */}
             <div className="p-5 border-b border-pink-100 flex justify-between items-center bg-pink-50">
               <h2 className="text-lg font-bold text-pink-700">
                 Keranjang Belanja
@@ -338,7 +341,6 @@ function Home() {
               </button>
             </div>
 
-            {/* List Barang */}
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
               {cart.length === 0 ? (
                 <div className="text-center py-20 text-gray-400 italic text-sm">
@@ -375,7 +377,6 @@ function Home() {
               )}
             </div>
 
-            {/* Footer Checkout */}
             <div className="p-6 bg-white border-t border-pink-100 shadow-[0_-10px_30px_rgba(0,0,0,0.03)]">
               <div className="mb-4">
                 <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">
