@@ -4,22 +4,20 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"os" // <--- PENTING: Buat baca settingan Cloud
+	"os"
 
 	_ "github.com/go-sql-driver/mysql"
 )
 
 func ConnectDB() *sql.DB {
-	// 1. Cek apakah ada settingan "DB_DSN" dari Cloud (Render/Aiven)?
+	// 1. Cek settingan Cloud
 	dsn := os.Getenv("DB_DSN")
 
-	// 2. Kalau KOSONG, berarti lagi di Laptop (Localhost)
+	// 2. Kalau KOSONG = Localhost
 	if dsn == "" {
-		// PENTING: Tetap pake port 3307 sesuai XAMPP lo!
 		dsn = "root:@tcp(127.0.0.1:3307)/gaya_beauty_db?parseTime=true"
 		fmt.Println("Mode: Localhost (Laptop - Port 3307)")
 	} else {
-		// Kalau ada isinya, berarti lagi di Cloud
 		fmt.Println("Mode: Cloud (Server)")
 	}
 
@@ -29,16 +27,15 @@ func ConnectDB() *sql.DB {
 		log.Fatal("Gagal koneksi database:", err)
 	}
 
-	// 4. Cek Ping (Pastikan nyambung)
+	// 4. Cek Ping
 	err = db.Ping()
 	if err != nil {
 		log.Fatal("Database tidak merespon:", err)
 	}
 
-	// --- 5. AUTO MIGRATE (BIKIN TABEL OTOMATIS) ---
-	// Ini penting biar di Aiven nanti tabelnya langsung jadi!
-	
-	// Tabel Users
+	// --- 5. AUTO MIGRATE (UPDATE SYARAT 2) ---
+
+	// A. Tabel Users (Admin)
 	queryUsers := `
 	CREATE TABLE IF NOT EXISTS users (
 		id INT AUTO_INCREMENT PRIMARY KEY,
@@ -47,42 +44,91 @@ func ConnectDB() *sql.DB {
 		password VARCHAR(255) NOT NULL,
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	);`
-
 	if _, err := db.Exec(queryUsers); err != nil {
 		log.Fatal("Gagal membuat tabel users:", err)
 	}
 
-    // Tabel Products (Gue tambahin sekalian biar aman di Cloud!)
-    queryProducts := `
-    CREATE TABLE IF NOT EXISTS products (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        price DECIMAL(10,2) NOT NULL,
-        stock INT NOT NULL,
-        category VARCHAR(100),
-        description TEXT,
-        image_url VARCHAR(255)
-    );`
+	// B. Tabel Products
+	queryProducts := `
+	CREATE TABLE IF NOT EXISTS products (
+		id INT AUTO_INCREMENT PRIMARY KEY,
+		name VARCHAR(255) NOT NULL,
+		price DECIMAL(10,2) NOT NULL,
+		stock INT NOT NULL,
+		category VARCHAR(100),
+		description TEXT,
+		image_url VARCHAR(255)
+	);`
+	if _, err := db.Exec(queryProducts); err != nil {
+		log.Fatal("Gagal membuat tabel products:", err)
+	}
 
-    if _, err := db.Exec(queryProducts); err != nil {
-        log.Fatal("Gagal membuat tabel products:", err)
-    }
-    
-    // Tabel Orders (Biar lengkap sekalian!)
-    queryOrders := `
-    CREATE TABLE IF NOT EXISTS orders (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        customer_name VARCHAR(100),
-        total_price DECIMAL(10,2),
-        payment_method VARCHAR(50),
-        status VARCHAR(20) DEFAULT 'Pending',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );`
+	// --- BARU: SYARAT 2 (TRANSAKSI & CUSTOMER) ---
 
-    if _, err := db.Exec(queryOrders); err != nil {
-        log.Fatal("Gagal membuat tabel orders:", err)
-    }
+	// C. Tabel Customers (Pembeli)
+	queryCustomers := `
+	CREATE TABLE IF NOT EXISTS customers (
+		id INT AUTO_INCREMENT PRIMARY KEY,
+		full_name VARCHAR(100) NOT NULL,
+		email VARCHAR(100) NOT NULL UNIQUE,
+		password VARCHAR(255) NOT NULL,
+		phone VARCHAR(20),
+		address TEXT,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);`
+	if _, err := db.Exec(queryCustomers); err != nil {
+		log.Fatal("Gagal membuat tabel customers:", err)
+	}
 
-	fmt.Println("✅ Berhasil konek ke Database & Semua Tabel Ready!")
+	// D. Tabel Carts (Keranjang Belanja)
+	queryCarts := `
+	CREATE TABLE IF NOT EXISTS carts (
+		id INT AUTO_INCREMENT PRIMARY KEY,
+		customer_id INT NOT NULL,
+		product_id INT NOT NULL,
+		quantity INT NOT NULL DEFAULT 1,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+		FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+	);`
+	if _, err := db.Exec(queryCarts); err != nil {
+		log.Fatal("Gagal membuat tabel carts:", err)
+	}
+
+	// E. Tabel Orders (Pesanan - Versi Update)
+	// Kita drop table orders lama kalau strukturnya beda, tapi karena database Aiven lo kosong/baru, aman langsung create.
+	// Kalau error, uncomment baris ini:
+	// _, _ = db.Exec("DROP TABLE IF EXISTS orders") 
+
+	queryOrders := `
+	CREATE TABLE IF NOT EXISTS orders (
+		id INT AUTO_INCREMENT PRIMARY KEY,
+		customer_id INT NOT NULL,
+		total_price DECIMAL(10,2) NOT NULL,
+		status VARCHAR(20) DEFAULT 'pending', -- pending, paid, shipped, done, cancelled
+		snap_token VARCHAR(255), -- Buat Midtrans nanti
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+	);`
+	if _, err := db.Exec(queryOrders); err != nil {
+		log.Fatal("Gagal membuat tabel orders:", err)
+	}
+
+	// F. Tabel Order Items (Rincian Barang per Order)
+	queryOrderItems := `
+	CREATE TABLE IF NOT EXISTS order_items (
+		id INT AUTO_INCREMENT PRIMARY KEY,
+		order_id INT NOT NULL,
+		product_id INT NOT NULL,
+		quantity INT NOT NULL,
+		price DECIMAL(10,2) NOT NULL, -- Harga saat beli (buat histori)
+		FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+		FOREIGN KEY (product_id) REFERENCES products(id)
+	);`
+	if _, err := db.Exec(queryOrderItems); err != nil {
+		log.Fatal("Gagal membuat tabel order_items:", err)
+	}
+
+	fmt.Println("✅ Database Terkoneksi & Tabel Syarat 2 SIAP!")
 	return db
 }
