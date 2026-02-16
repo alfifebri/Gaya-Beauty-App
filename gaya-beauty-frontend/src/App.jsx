@@ -1,34 +1,42 @@
 import { Routes, Route } from 'react-router-dom'
 import Home from './pages/Home'
 
-// === BAGIAN INI GUE BENERIN ===
-// Kita import dari file "CustomerLogin" tapi kita namain variabelnya "LoginMember"
+// === LOGIN MEMBER/CUSTOMER ===
 import LoginMember from './pages/CustomerLogin'
 import RegisterMember from './pages/CustomerRegister'
-// ==============================
-
 import MyOrders from './pages/MyOrders'
+
+// === LOGIN ADMIN ===
 import Login from './pages/Login'
 import Register from './pages/Register'
 import AdminDashboard from './pages/AdminDashboard'
 
+// === 🔥 INI YANG KITA TAMBAHIN BIAR GAK BLANK ===
+import ProductDetail from './pages/ProductDetail' // Buat Halaman Klik Produk
+import AddProduct from './pages/AddProduct' // Buat Halaman Tambah Produk
+// ================================================
+
 function App() {
   return (
     <Routes>
-      {/* JALUR UMUM */}
+      {/* === JALUR UMUM === */}
       <Route path="/" element={<Home />} />
 
-      {/* Ini tetep pake LoginMember karena di atas udah kita alias-kan */}
+      {/* 🔥 RUTE BARU: KLIK PRODUK */}
+      <Route path="/product/:id" element={<ProductDetail />} />
+
+      {/* === JALUR CUSTOMER === */}
       <Route path="/login-member" element={<LoginMember />} />
       <Route path="/register-member" element={<RegisterMember />} />
-
-      {/* JALUR CUSTOMER (BARU) */}
       <Route path="/my-orders" element={<MyOrders />} />
 
-      {/* JALUR ADMIN */}
+      {/* === JALUR ADMIN === */}
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/admin" element={<AdminDashboard />} />
+
+      {/* 🔥 RUTE BARU: TAMBAH PRODUK (ADMIN) */}
+      <Route path="/products/create" element={<AddProduct />} />
     </Routes>
   )
 }
