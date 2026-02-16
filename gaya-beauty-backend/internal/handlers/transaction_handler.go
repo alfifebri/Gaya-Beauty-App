@@ -16,8 +16,9 @@ type CheckoutRequest struct {
 	CartItems     []CartItemData `json:"cart_items"`
 }
 
+// struktur data untuk setiap item di keranjang belanjaan
 type CartItemData struct {
-	ProductID int     `json:"product_id"`
+	ProductID int     `json:"product_id"` 
 	Quantity  int     `json:"quantity"`
 	Price     float64 `json:"price"`
 }
