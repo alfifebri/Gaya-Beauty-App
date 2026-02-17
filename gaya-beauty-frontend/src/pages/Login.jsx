@@ -81,7 +81,7 @@ export default function Login() {
             disabled={isLoading}
             className="w-full bg-pink-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-pink-700 hover:shadow-pink-300 transition transform hover:-translate-y-1 disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
-            {isLoading ? 'Sedang Memproses...' : 'Masuk Dashboard 🚀'}
+            {isLoading ? 'Sedang Memproses...' : 'Masuk Dashboard'}
           </button>
         </form>
 
