@@ -11,7 +11,7 @@ function AddProduct() {
   const [stock, setStock] = useState('')
   const [category, setCategory] = useState('Skincare')
   const [imageUrl, setImageUrl] = useState('') // Link hasil upload
-  const [description, setDescription] = useState('')
+  const [description, setDescription] = useState('') // deskripsi produk
 
   // State untuk Loading
   const [isUploading, setIsUploading] = useState(false)
