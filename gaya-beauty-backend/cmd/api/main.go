@@ -9,17 +9,22 @@ import (
 )
 
 func main() {
-	// 1. Konek Database
+	// 1. KONEK DATABASE
 	db := database.ConnectDB()
 	defer db.Close()
 
 	// =================================================================
-	// ☢️ PINTU DARURAT: RESET TOTAL & PERSIAPAN TABEL LENGKAP ☢️
+	// ☢️ PINTU DARURAT: RESET DB (UPDATED SCHEMA) ☢️
 	// Akses: [LinkKoyeb]/reset-db-now
 	// =================================================================
 	http.HandleFunc("/reset-db-now", func(w http.ResponseWriter, r *http.Request) {
-		// A. USER: Hancurkan Tabel Lama & Bangun Baru (Ada Role)
-		_, _ = db.Exec("DROP TABLE IF EXISTS users")
+		// A. Hapus Tabel Lama (Urutan Penting karena Foreign Key)
+		db.Exec("DROP TABLE IF EXISTS order_items")
+		db.Exec("DROP TABLE IF EXISTS orders")
+		db.Exec("DROP TABLE IF EXISTS products")
+		db.Exec("DROP TABLE IF EXISTS users")
+
+		// B. Tabel USERS
 		queryUser := `
 		CREATE TABLE users (
 			id INT AUTO_INCREMENT PRIMARY KEY,
@@ -29,11 +34,11 @@ func main() {
 			role VARCHAR(50) DEFAULT 'admin',
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)`
-		_, errUser := db.Exec(queryUser)
+		if _, err := db.Exec(queryUser); err != nil { fmt.Fprintf(w, "Gagal User: %v\n", err) }
 
-		// B. PRODUK: Pastikan Tabel Produk Ada (Biar gak error pas upload)
+		// C. Tabel PRODUCTS
 		queryProduct := `
-		CREATE TABLE IF NOT EXISTS products (
+		CREATE TABLE products (
 			id INT AUTO_INCREMENT PRIMARY KEY,
 			name VARCHAR(255),
 			price DECIMAL(10, 2),
@@ -43,89 +48,73 @@ func main() {
 			image_url VARCHAR(255),
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)`
-		_, errProd := db.Exec(queryProduct)
+		if _, err := db.Exec(queryProduct); err != nil { fmt.Fprintf(w, "Gagal Product: %v\n", err) }
 
-		// C. ORDERS: Pastikan Tabel Order Ada
+		// D. Tabel ORDERS (Struktur Baru)
 		queryOrder := `
-		CREATE TABLE IF NOT EXISTS orders (
+		CREATE TABLE orders (
 			id INT AUTO_INCREMENT PRIMARY KEY,
-			customer_name VARCHAR(100),
-			total_price DECIMAL(10, 2),
+			customer_id INT NOT NULL,
+			customer_name VARCHAR(255),
+			total_price DECIMAL(10, 2) NOT NULL,
 			status VARCHAR(50) DEFAULT 'Pending',
+			payment_method VARCHAR(50),
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)`
-		_, errOrder := db.Exec(queryOrder)
+		if _, err := db.Exec(queryOrder); err != nil { fmt.Fprintf(w, "Gagal Order: %v\n", err) }
 
-		// D. Lapor ke Layar Browser
-		fmt.Fprintf(w, "=== STATUS RESET & PERSIAPAN DATABASE ===\n")
-		fmt.Fprintf(w, "1. Reset Tabel User (Ada Role): %v (Nil = Sukses)\n", errUser)
-		fmt.Fprintf(w, "2. Siapkan Tabel Products: %v (Nil = Sukses)\n", errProd)
-		fmt.Fprintf(w, "3. Siapkan Tabel Orders: %v (Nil = Sukses)\n", errOrder)
-		fmt.Fprintf(w, "\n✅ SEMUA TABEL SIAP! SILAKAN UPLOAD PRODUK SEPUASNYA!")
+		// E. Tabel ORDER_ITEMS (Struktur Baru)
+		queryOrderItems := `
+		CREATE TABLE order_items (
+			id INT AUTO_INCREMENT PRIMARY KEY,
+			order_id INT NOT NULL,
+			product_id INT NOT NULL,
+			quantity INT NOT NULL,
+			price DECIMAL(10, 2) NOT NULL,
+			FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+			FOREIGN KEY (product_id) REFERENCES products(id)
+		)`
+		if _, err := db.Exec(queryOrderItems); err != nil { fmt.Fprintf(w, "Gagal Order Items: %v\n", err) }
+
+		fmt.Fprintf(w, "\n DATABASE BERHASIL DI-RESET DENGAN STRUKTUR BARU!")
 	})
 
 	// =================================================================
-	// 🕵️‍♂️ FITUR X-RAY CEK USER 🕵️‍♂️
-	// Akses: [LinkKoyeb]/cek-user
+	// DAFTAR RUTE (ROUTING)
 	// =================================================================
-	http.HandleFunc("/cek-user", func(w http.ResponseWriter, r *http.Request) {
-		rows, err := db.Query("SELECT id, email, password, role FROM users")
-		if err != nil {
-			fmt.Fprintf(w, "Gagal ambil data: %v", err)
-			return
-		}
-		defer rows.Close()
 
-		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprintf(w, "<h1>🔍 HASIL X-RAY DATABASE:</h1>")
-		fmt.Fprintf(w, "<table border='1' cellpadding='10'><tr><th>ID</th><th>Email</th><th>Role</th><th>Status Pw</th></tr>")
-		
-		found := false
-		for rows.Next() {
-			found = true
-			var id int
-			var email, password, role string
-			rows.Scan(&id, &email, &password, &role)
-			
-			status := "✅ AMAN"
-			if len(password) < 60 { status = "❌ RUSAK" }
-
-			fmt.Fprintf(w, "<tr><td>%d</td><td>%s</td><td>%s</td><td>%s</td></tr>", id, email, role, status)
-		}
-		fmt.Fprintf(w, "</table>")
-		if !found { fmt.Fprintf(w, "<h3>Database Kosong</h3>") }
-	})
-
-	// --- JALUR PUBLIK ---
+	// 1. PUBLIC ROUTES
 	http.HandleFunc("/login", handlers.HandleLogin(db))
 	http.HandleFunc("/register", handlers.HandleRegister(db))
-	http.HandleFunc("/products", handlers.HandleProducts(db)) 
+	http.HandleFunc("/products", handlers.HandleProducts(db))
 	http.HandleFunc("/checkout", handlers.HandleCheckout(db))
+	
+	// 2. CUSTOMER ROUTES
+	http.HandleFunc("/customer/register", handlers.HandleCustomerRegister(db))
+	http.HandleFunc("/customer/login", handlers.HandleCustomerLogin(db))
 	http.HandleFunc("/my-orders", handlers.HandleGetMyOrders(db))
 	http.HandleFunc("/complete-order", handlers.HandleCompleteOrder(db))
 
-	// ---> TAMBAHAN BARU SYARAT 2 (CUSTOMER) <---
-  http.HandleFunc("/customer/register", handlers.HandleCustomerRegister(db))
-  http.HandleFunc("/customer/login", handlers.HandleCustomerLogin(db))
-
-	// --- JALUR FILE GAMBAR ---
-	http.Handle("/uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir("./uploads"))))
-
-	// --- JALUR ADMIN (Middleware) ---
+	// 3. ADMIN ROUTES (Protected)
+	// Order Management
 	http.HandleFunc("/orders", handlers.AuthMiddleware(handlers.HandleGetOrders(db)))
-	http.HandleFunc("/orders/update", handlers.AuthMiddleware(handlers.HandleUpdateOrderStatus(db)))
-	
-	// INI DIA YANG PENTING BUAT UPLOAD PRODUK:
+	http.HandleFunc("/orders/update", handlers.AuthMiddleware(handlers.HandleUpdateOrderStatus(db))) // Jalur Update Status
+
+	// Product Management
 	http.HandleFunc("/products/create", handlers.AuthMiddleware(handlers.HandleCreateProduct(db)))
 	http.HandleFunc("/products/update", handlers.AuthMiddleware(handlers.HandleUpdateProduct(db)))
 	http.HandleFunc("/products/delete", handlers.AuthMiddleware(handlers.HandleDeleteProduct(db)))
 
-	// --- SETUP PORT ---
+	// 4. STATIC FILES (Images)
+	http.Handle("/uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir("./uploads"))))
+
+	// =================================================================
+	// START SERVER
+	// =================================================================
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8081"
 	}
-
-	fmt.Println("Server ON di Port:", port)
+	fmt.Println(" Server GAYA BEAUTY jalan di Port:", port)
 	http.ListenAndServe(":"+port, nil)
 }

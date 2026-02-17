@@ -7,116 +7,183 @@ import (
 	"net/http"
 )
 
-// Struktur Data yang dikirim dari Frontend (Home.jsx)
+// === STRUKTUR DATA (Disesuaikan Frontend) ===
 type CheckoutRequest struct {
 	CustomerID    int            `json:"customer_id"`
-	CustomerName  string         `json:"customer_name"`
-	PaymentMethod string         `json:"payment_method"`
+	CustomerName  string         `json:"customer_name"` // BARU
+	PaymentMethod string         `json:"payment_method"` // BARU
 	TotalPrice    float64        `json:"total_price"`
 	CartItems     []CartItemData `json:"cart_items"`
 }
 
-// struktur data untuk setiap item di keranjang belanjaan
 type CartItemData struct {
 	ProductID int     `json:"product_id"`
 	Quantity  int     `json:"quantity"`
 	Price     float64 `json:"price"`
 }
 
-// === 1. HANDLE CHECKOUT (PROSES BELI) ===
+type OrderResponse struct {
+	ID            int             `json:"id"`
+	CustomerName  string          `json:"customer_name"`
+	PaymentMethod string          `json:"payment_method"`
+	TotalPrice    float64         `json:"total_price"`
+	Status        string          `json:"status"`
+	CreatedAt     string          `json:"created_at"`
+	Items         []OrderItemResp `json:"items"` // BIAR ADMIN LIAT BARANGNYA
+}
+
+type OrderItemResp struct {
+	ProductName string `json:"product_name"`
+	Quantity    int    `json:"quantity"`
+}
+
+// =========================================================
+// 1. HANDLE CHECKOUT (CUSTOMER BELI)
+// =========================================================
 func HandleCheckout(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// 1. SETUP CORS
 		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		if r.Method != "POST" {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
-		// 2. BACA DATA
+		
+		// Decode Data
 		var req CheckoutRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "Data belanjaan error/tidak lengkap", http.StatusBadRequest)
+			http.Error(w, "Data tidak lengkap", http.StatusBadRequest)
 			return
 		}
 
-		// 3. MULAI TRANSAKSI
+		// Mulai Transaksi Database
 		tx, err := db.Begin()
 		if err != nil {
-			http.Error(w, "Gagal memulai transaksi", http.StatusInternalServerError)
+			http.Error(w, "Server Error", http.StatusInternalServerError)
 			return
 		}
 
-		// 4. SIMPAN ORDER HEADER
-		res, err := tx.Exec("INSERT INTO orders (customer_id, total_price, status, created_at) VALUES (?, ?, 'Pending', NOW())",
-			req.CustomerID, req.TotalPrice)
-
+		// INSERT KE ORDERS (LENGKAP)
+		res, err := tx.Exec(`
+			INSERT INTO orders (customer_id, customer_name, payment_method, total_price, status, created_at) 
+			VALUES (?, ?, ?, ?, 'Pending', NOW())`,
+			req.CustomerID, req.CustomerName, req.PaymentMethod, req.TotalPrice)
+		
 		if err != nil {
 			tx.Rollback()
-			log.Println("Error Insert Order:", err)
+			log.Println("Gagal Insert Order:", err)
 			http.Error(w, "Gagal membuat pesanan", http.StatusInternalServerError)
 			return
 		}
 
 		orderID, _ := res.LastInsertId()
 
-		// 5. LOOPING BARANG & POTONG STOK
+		// LOOPING ITEMS
 		for _, item := range req.CartItems {
-			// Masukin ke order_items
-			_, err := tx.Exec("INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)",
+			// Insert Item
+			_, err := tx.Exec(`INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)`,
 				orderID, item.ProductID, item.Quantity, item.Price)
-
+			
 			if err != nil {
 				tx.Rollback()
-				log.Println("Error Insert Item:", err)
-				http.Error(w, "Gagal menyimpan rincian barang", http.StatusInternalServerError)
+				http.Error(w, "Gagal insert item", http.StatusInternalServerError)
 				return
 			}
 
 			// Potong Stok
-			_, err = tx.Exec("UPDATE products SET stock = stock - ? WHERE id = ?", item.Quantity, item.ProductID)
+			_, err = tx.Exec(`UPDATE products SET stock = stock - ? WHERE id = ?`, item.Quantity, item.ProductID)
 			if err != nil {
 				tx.Rollback()
-				log.Println("Error Update Stok:", err)
-				http.Error(w, "Gagal update stok (Mungkin barang habis)", http.StatusInternalServerError)
+				http.Error(w, "Stok habis", http.StatusInternalServerError)
 				return
 			}
 		}
 
-		// 6. COMMIT TRANSAKSI
-		if err := tx.Commit(); err != nil {
-			http.Error(w, "Gagal finalisasi transaksi", http.StatusInternalServerError)
+		tx.Commit()
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"message": "Checkout Berhasil!", 
+			"order_id": orderID,
+		})
+	}
+}
+
+// =========================================================
+// 2. GET ALL ORDERS (KHUSUS ADMIN) - FITUR BARU
+// =========================================================
+func HandleGetOrders(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// Ambil Semua Order
+		rows, err := db.Query("SELECT id, customer_name, payment_method, total_price, status, created_at FROM orders ORDER BY created_at DESC")
+		if err != nil {
+			http.Error(w, "Gagal ambil order", http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		var orders []OrderResponse
+
+		for rows.Next() {
+			var o OrderResponse
+			rows.Scan(&o.ID, &o.CustomerName, &o.PaymentMethod, &o.TotalPrice, &o.Status, &o.CreatedAt)
+
+			// AMBIL DETAIL ITEM BUAT TIAP ORDER (JOIN KE PRODUCTS BIAR DAPET NAMA)
+			itemRows, _ := db.Query(`
+				SELECT p.name, oi.quantity 
+				FROM order_items oi 
+				JOIN products p ON oi.product_id = p.id 
+				WHERE oi.order_id = ?`, o.ID)
+			
+			var items []OrderItemResp
+			for itemRows.Next() {
+				var i OrderItemResp
+				itemRows.Scan(&i.ProductName, &i.Quantity)
+				items = append(items, i)
+			}
+			itemRows.Close()
+
+			o.Items = items
+			orders = append(orders, o)
+		}
+
+		if orders == nil { orders = []OrderResponse{} }
+		json.NewEncoder(w).Encode(orders)
+	}
+}
+
+// =========================================================
+// 3. UPDATE STATUS ORDER (ADMIN) - FITUR BARU
+// =========================================================
+func HandleUpdateOrderStatus(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		var req struct {
+			OrderID int    `json:"order_id"`
+			Status  string `json:"status"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Data json error", http.StatusBadRequest)
 			return
 		}
 
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"message":  "Checkout Berhasil!",
-			"order_id": orderID,
-			"status":   "Pending",
-		})
-	}
-} // <--- INI DIA YANG TADI HILANG! (Penutup HandleCheckout)
+		_, err := db.Exec("UPDATE orders SET status = ? WHERE id = ?", req.Status, req.OrderID)
+		if err != nil {
+			http.Error(w, "Gagal update database", http.StatusInternalServerError)
+			return
+		}
 
-// === 2. AMBIL PESANAN SAYA (KHUSUS CUSTOMER) ===
+		json.NewEncoder(w).Encode(map[string]string{"message": "Status berhasil diupdate!"})
+	}
+}
+
+// =========================================================
+// 4. GET MY ORDERS (CUSTOMER)
+// =========================================================
 func HandleGetMyOrders(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-
 		customerID := r.URL.Query().Get("user_id")
 
 		rows, err := db.Query("SELECT id, total_price, status, created_at FROM orders WHERE customer_id = ? ORDER BY created_at DESC", customerID)
 		if err != nil {
-			http.Error(w, "Gagal ambil data", http.StatusInternalServerError)
+			http.Error(w, "Error database", http.StatusInternalServerError)
 			return
 		}
 		defer rows.Close()
@@ -124,54 +191,28 @@ func HandleGetMyOrders(db *sql.DB) http.HandlerFunc {
 		var orders []map[string]interface{}
 		for rows.Next() {
 			var id int
-			var totalPrice float64
-			var status, createdAt string
-			rows.Scan(&id, &totalPrice, &status, &createdAt)
-
+			var total float64
+			var status, created string
+			rows.Scan(&id, &total, &status, &created)
 			orders = append(orders, map[string]interface{}{
-				"id":          id,
-				"total_price": totalPrice,
-				"status":      status,
-				"created_at":  createdAt,
+				"id": id, "total_price": total, "status": status, "created_at": created,
 			})
 		}
 
-		// PENTING: Kalau kosong, inisialisasi biar jadi [] bukan null
-		if orders == nil {
-			orders = []map[string]interface{}{}
-		}
-
+		if orders == nil { orders = []map[string]interface{}{} }
 		json.NewEncoder(w).Encode(orders)
 	}
 }
 
-// === 3. CUSTOMER KONFIRMASI TERIMA BARANG ===
+// =========================================================
+// 5. COMPLETE ORDER (CUSTOMER TERIMA BARANG)
+// =========================================================
 func HandleCompleteOrder(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		var req struct {
-			OrderID int `json:"order_id"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "Data salah", http.StatusBadRequest)
-			return
-		}
-
-		_, err := db.Exec("UPDATE orders SET status = 'Selesai' WHERE id = ?", req.OrderID)
-		if err != nil {
-			http.Error(w, "Gagal update status", http.StatusInternalServerError)
-			return
-		}
-
-		json.NewEncoder(w).Encode(map[string]string{"message": "Terima kasih! Pesanan selesai."})
+		var req struct { OrderID int `json:"order_id"` }
+		json.NewDecoder(r.Body).Decode(&req)
+		db.Exec("UPDATE orders SET status = 'Selesai' WHERE id = ?", req.OrderID)
+		json.NewEncoder(w).Encode(map[string]string{"message": "Pesanan Selesai"})
 	}
 }
