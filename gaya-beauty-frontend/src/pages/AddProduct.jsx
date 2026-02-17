@@ -154,6 +154,7 @@ function AddProduct() {
               <option value="Makeup">Makeup</option>
               <option value="Bodycare">Bodycare</option>
               <option value="Haircare">Haircare</option>
+              <option value="Haircare">Lainnya</option>
             </select>
           </div>
 
@@ -224,7 +225,7 @@ function AddProduct() {
                   : 'bg-pink-600 hover:bg-pink-700 hover:shadow-pink-300'
               }`}
             >
-              {isSubmitting ? 'Menyimpan...' : 'Simpan Produk ✨'}
+              {isSubmitting ? 'Menyimpan...' : 'Simpan Produk Baru'}
             </button>
           </div>
         </form>
